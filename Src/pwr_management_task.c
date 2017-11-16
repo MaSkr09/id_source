@@ -40,7 +40,6 @@
 #ifdef DEBUG
 #include "debug_task.h"
 #endif
-
 #include "main.h"
 #include "pwr_management_task.h"
 
