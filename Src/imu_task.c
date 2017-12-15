@@ -83,23 +83,6 @@ void imu_main(void *pvParameters)
   vTaskDelay(100 / portTICK_RATE_MS);
   bool pwr_on = false;
 
-
-/*********************** Delete this for using IMU *****************/
-    mpu_sleep();
-    xSemaphoreGive( xSemaphoreImuPwrIsDown );
-    // The task suspends itself.
-    vTaskDelay(1000 / portTICK_RATE_MS);
-    vTaskSuspend( NULL ); // until implemented right
-/********************************************************************/
-
-
-
-
-
-
-
-
-
   /* Wait until powered up */
   while(!pwr_on)
   {
@@ -120,6 +103,21 @@ void imu_main(void *pvParameters)
     struct int_param_s int_param;
 
     int_param.cb = NULL;
+
+/*********************** Delete this for using IMU *****************/
+  if( xSemaphoreTake( xSemaphoreI2CPeriph, ( TickType_t ) 500 ) == pdTRUE )
+  {
+    temp_start(&int_param);
+    vTaskDelay(100 / portTICK_RATE_MS);
+    mpu_sleep();
+    xSemaphoreGive( xSemaphoreI2CPeriph );
+  }
+    xSemaphoreGive( xSemaphoreImuPwrIsDown );
+    // The task suspends itself.
+    vTaskDelay(1000 / portTICK_RATE_MS);
+    vTaskSuspend( NULL ); // until implemented right
+/********************************************************************/
+
 
   if( xSemaphoreTake( xSemaphoreI2CPeriph, ( TickType_t ) 500 ) == pdTRUE )
   {

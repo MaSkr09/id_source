@@ -198,7 +198,7 @@ void indicator_main(void *pvParameters)
       break;
 
       case BTN_RELEASE:
-        set_led_duty(0xFFFF, 0xFFFF, 0xFFFF);
+        set_led_duty(0x5FFF, 0xFFFF, 0x5FFF);
       break;
 
       case DRONEID_CONNECT:
@@ -251,7 +251,7 @@ void indicator_main(void *pvParameters)
             else
             {
               pwm_duty = 0;
-              set_led_duty(0xFFFF, 0xFFFF, 0xFFFF);
+              set_led_duty(0x5FFF, 0xFFFF, 0x5FFF);
               xTimerChangePeriod(xHandleIndicatorGPTimer, 50, 100 );
               xTimerReset( xHandleIndicatorGPTimer, 100);              
               indicator_high = false;
@@ -289,7 +289,7 @@ void indicator_main(void *pvParameters)
             }
             else
             {
-              set_led_duty(0xFFFF, 0xFFFF, 0xFFFF);
+              set_led_duty(0x5FFF, 0xFFFF, 0x5FFF);
               xTimerChangePeriod(xHandleIndicatorGPTimer, 50, 100 );
               xTimerReset( xHandleIndicatorGPTimer, 100);              
               indicator_high = false;
@@ -328,7 +328,7 @@ void indicator_main(void *pvParameters)
             else
             {
               pwm_duty = 0;
-              set_led_duty(0xFFFF, 0xFFFF, 0xFFFF);
+              set_led_duty(0x5FFF, 0xFFFF, 0x5FFF);
               xTimerChangePeriod(xHandleIndicatorGPTimer, 50, 100 );
               xTimerReset( xHandleIndicatorGPTimer, 100);              
               indicator_high = false;

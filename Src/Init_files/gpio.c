@@ -111,7 +111,11 @@ void MX_GPIO_Init(void)
   /*Configure GPIO pin : PtPin */
   GPIO_InitStruct.Pin = GPIO_CAP_BTN_PWR_O_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+#ifdef DEV_VERSION 
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+#else
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+#endif
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIO_CAP_BTN_PWR_O_GPIO_Port, &GPIO_InitStruct);
 
@@ -122,11 +126,25 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
+#ifdef DEV_VERSION 
+  /*Configure GPIO pins : PAPin PAPin */
+  GPIO_InitStruct.Pin = GPIO_CAP_BUTTON_I_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  GPIO_InitStruct.Pin = GPIO_MPU_9250_INT_I_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+#else
   /*Configure GPIO pins : PAPin PAPin */
   GPIO_InitStruct.Pin = GPIO_CAP_BUTTON_I_Pin|GPIO_MPU_9250_INT_I_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+#endif
+
 
   /*Configure GPIO pin : PtPin */
   GPIO_InitStruct.Pin = GPIO_MPU_9250_FSYNC_O_Pin;

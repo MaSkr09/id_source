@@ -405,7 +405,8 @@ void update_pre_pos()
 /***************************************************************************/
 bool start_response_from_server()
 {
-  bool response_ok = false;
+  //TODO change when Kjeld update server
+  bool response_ok = true; //false;
   int16_t timeout = TIME_5000_MS;
   
   while((!(response_ok)) && (timeout > 0))
