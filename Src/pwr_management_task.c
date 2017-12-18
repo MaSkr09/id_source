@@ -138,13 +138,13 @@ bool btn_touch_detected()
   }
 
   // Change indicator signal to release time frame 
-  if(!HAL_GPIO_ReadPin(GPIO_CAP_BUTTON_I_GPIO_Port,GPIO_CAP_BUTTON_I_Pin))
+  if(HAL_GPIO_ReadPin(GPIO_CAP_BUTTON_I_GPIO_Port,GPIO_CAP_BUTTON_I_Pin))
     change_indicator(BTN_RELEASE_SIGN_MGMT);
   else
     change_indicator(NO_INDICATION_PWR);
 
   // Time frame to move finger from touch btn 
-  while((!HAL_GPIO_ReadPin(GPIO_CAP_BUTTON_I_GPIO_Port,GPIO_CAP_BUTTON_I_Pin)) && cnt < DRONEID_BTN_TOUCH_MAX_TIME_MS)
+  while((HAL_GPIO_ReadPin(GPIO_CAP_BUTTON_I_GPIO_Port,GPIO_CAP_BUTTON_I_Pin)) && cnt < DRONEID_BTN_TOUCH_MAX_TIME_MS)
   {
     cnt++;
     vTaskDelay(DELAY_1_MS / portTICK_RATE_MS);
@@ -165,7 +165,7 @@ void pwr_down_droneid()
 {
   change_indicator(NO_INDICATION_PWR);
   // Make sure btn is released before shutdown
-  while(!HAL_GPIO_ReadPin(GPIO_CAP_BUTTON_I_GPIO_Port,GPIO_CAP_BUTTON_I_Pin)){}
+  while(HAL_GPIO_ReadPin(GPIO_CAP_BUTTON_I_GPIO_Port,GPIO_CAP_BUTTON_I_Pin)){}
 
 #ifdef DEBUG
   debug_add_to_queue("pwr management task: Suspending MCU \n");

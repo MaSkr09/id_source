@@ -64,7 +64,7 @@ void MX_TIM2_Init(void)
     Error_Handler();
   }
 
-  sConfigOC.OCMode = TIM_OCMODE_PWM2; //TIM_OCMODE_PWM1;
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
   sConfigOC.Pulse = 0;//100;//0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;//TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
@@ -118,7 +118,7 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* timHandle)
     PA3     ------> TIM2_CH4 
     */
     GPIO_InitStruct.Pin = TIM2_CH2_PWM_RED_LED_O_Pin|TIM2_CH3_PWM_GREEN_LED_O_Pin|TIM2_CH4_PWM_BLUE_LED_O_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD; // GPIO_MODE_AF_PP; //
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF1_TIM2;
