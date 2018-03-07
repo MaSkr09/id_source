@@ -74,7 +74,7 @@ typedef struct
 /* droneid server settings */
 #define GMS_MSG_PERIOD_S              15
 
-#define DRONE_ID_NUMBER              (uint32_t)5
+#define DRONE_ID_NUMBER              (uint32_t)150
 #define PROTOCOL_VERSION              0
 #define FIRMWARE_VERSION_NO           2.2
 #define HW_VERSION_NO                 2.1
