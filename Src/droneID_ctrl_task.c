@@ -124,15 +124,15 @@ bool reset_utm_var()
 
     if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) DELAY_50_MS ) == pdTRUE )
     {
-      received_resp_cell_id = false;
+      gsm_signal_and_signal.received_resp_cell_id = false;
       echo_msg_count_cell_id = 0;
       send_msg_count_cell_id = 5;
-      mob_country_code = 0;
-      mob_network_code = 0;
-      mob_location_area_code = 0;
-      mob_cell_id_code = 0;
-      pre_mob_location_area_code = 0;
-      pre_mob_cell_id_code = 0;
+      gsm_signal_and_signal.mob_country_code = 0;
+      gsm_signal_and_signal.mob_network_code = 0;
+      gsm_signal_and_signal.mob_location_area_code = 0;
+      gsm_signal_and_signal.mob_cell_id_code = 0;
+      gsm_signal_and_signal.pre_mob_location_area_code = 0;
+      gsm_signal_and_signal.pre_mob_cell_id_code = 0;
       xSemaphoreGive(xSemaphoreCellId);
       success = true;
     }
@@ -288,8 +288,8 @@ bool gsm_info_update(void)
   {
     if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) DELAY_5_MS ) == pdTRUE )
     {
-      pre_mob_cell_id_code = mob_cell_id_code;
-      pre_mob_location_area_code = mob_location_area_code;
+      gsm_signal_and_signal.pre_mob_cell_id_code = gsm_signal_and_signal.mob_cell_id_code;
+      gsm_signal_and_signal.pre_mob_location_area_code = gsm_signal_and_signal.mob_location_area_code;
       xSemaphoreGive( xSemaphoreCellId );
       success = true;
     }

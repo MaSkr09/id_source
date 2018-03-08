@@ -163,13 +163,11 @@ uint8_t serv_cmd = 0;
 
 /* Protected cell id and area code */
 SemaphoreHandle_t xSemaphoreCellId;
-bool received_resp_cell_id = false;
-uint16_t mob_country_code = 0;
-uint16_t mob_network_code = 0;
-uint16_t mob_location_area_code = 0;
-uint32_t mob_cell_id_code = 0;
-uint16_t pre_mob_location_area_code = 0;
-uint32_t pre_mob_cell_id_code = 0;
+ublox_gsm_sign_t gsm_signal_and_signal;
+
+SemaphoreHandle_t xSemaphoreSocket;
+ublox_socket_t socket_data;
+
 
 /* Queue to add data msg */
 QueueHandle_t xQueueSlipData;
@@ -180,7 +178,7 @@ uint8_t debug_trasnmit_complete = APP_FALSE;
 
 /* Ublox mutex protected data register */
 SemaphoreHandle_t xSemaphoreUbloxStatusReg;
-ublox_reg_t ublox_status_reg;
+ublox_receive_results_t ublox_status_reg;
 
 /* Protected gga msg */
 SemaphoreHandle_t xSemaphoreGgaMsg;
@@ -386,7 +384,7 @@ void main(void)
 
   /* Protected cell id and area code */
   xSemaphoreCellId = xSemaphoreCreateMutex();
-  
+  xSemaphoreSocket = xSemaphoreCreateMutex();
   /* variables to define indication with LEDs */
   xSemaphoreTaskIndicators = xSemaphoreCreateMutex();
 

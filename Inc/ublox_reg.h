@@ -36,9 +36,18 @@
 #define _UBLOX_REG_H
 
 /***************************************************************************/
+/* Includes */
+/***************************************************************************/
+#include <stdbool.h>
+
+/***************************************************************************/
 /* Global types and structs */
 /***************************************************************************/
 
+
+/***************************************************************************/
+/* Result from requests */
+/***************************************************************************/
 typedef enum 
 {
   NONE_RESULT_CODE,
@@ -50,23 +59,40 @@ typedef struct
 {
   ublox_result_code_t CPIN_RESULT_CODE;
   ublox_result_code_t DIS_ECHO_RESULT_CODE;
-
   ublox_result_code_t CGATT_RESULT_CODE;
   ublox_result_code_t GP_RESULT_CODE;
   ublox_result_code_t MODEM_READY_FOR_DATA;
-
-  uint8_t CREATED_SOCKET_NO;
   ublox_result_code_t CREATED_SOCKET_NO_RESULT_CODE;
-  uint8_t SERVER_IP[18];
   ublox_result_code_t SERVER_IP_RESULT_CODE;
-
-  uint8_t SIGNAL_Q_VAR;
-
   ublox_result_code_t RECEIVED_GSM_PWR_DOWN_RESULT_CODE;
-
   uint16_t UDP_NO_OF_BYTES_TO_READ;
   uint16_t UDP_READING_NO_OF_BYTES;
-} ublox_reg_t;
+} ublox_receive_results_t;
+
+/***************************************************************************/
+/* Socket data */
+/***************************************************************************/
+typedef struct
+{
+  uint8_t CREATED_SOCKET_NO;
+  uint8_t SERVER_IP[18];
+} ublox_socket_t;
+
+/***************************************************************************/
+/* Signal to noise and gsm location */
+/***************************************************************************/
+typedef struct
+{
+  uint8_t SIGNAL_Q_VAR;
+  bool received_resp_cell_id;
+  uint16_t mob_country_code;
+  uint16_t mob_network_code;
+  uint16_t mob_location_area_code;
+  uint32_t mob_cell_id_code;
+  uint16_t pre_mob_location_area_code;
+  uint32_t pre_mob_cell_id_code;
+} ublox_gsm_sign_t;
+
 
 /***************************************************************************/
 /* Global defines */
@@ -90,7 +116,6 @@ typedef struct
 #define GPRS_ATTACHED           "CGATT"
 #define CGATT_SUCCES            "+CGATT: 1"
 
-
 /* Packet switched data configuration +UPSD */
 #define AT_PACK_SWITCH_CONFIG         "UPSD"
 #define AT_PSD_PROFILE                "0"
@@ -110,7 +135,6 @@ typedef struct
 /* Resolve name / IP number through DNS +UDNSRN */
 #define AT_RESOLVE_SERVER_IP          "UDNSRN"
 #define AT_DOMAIN_NAME_TO_IP          "0"
-
 
 #define AT_SEND_TO_SERVER             "USOST"
 
@@ -197,6 +221,5 @@ typedef struct
 /* Enable HEX mode */
 #define AT_HEX_MODE                   "+UDCONF=1"
 #define AT_EN_HEX_MODE                "1"
-
 
 #endif /* _UBLOX_REG_H */

@@ -139,6 +139,21 @@ bool reset_modem_parameters()
     ublox_status_reg.UDP_READING_NO_OF_BYTES = 0;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
 
+  if(xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_500_MS ) == pdTRUE)
+  {
+    gsm_signal_and_signal.SIGNAL_Q_VAR = 99;
+    gsm_signal_and_signal.received_resp_cell_id = false;
+    gsm_signal_and_signal.mob_country_code = 0;
+    gsm_signal_and_signal.mob_network_code = 0;
+    gsm_signal_and_signal.mob_location_area_code = 0;
+    gsm_signal_and_signal.mob_cell_id_code = 0;
+    gsm_signal_and_signal.pre_mob_location_area_code = 0;
+    gsm_signal_and_signal.pre_mob_cell_id_code = 0;
+    xSemaphoreGive(xSemaphoreCellId);
+  }
+
+
+
     if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
     {
       for(i=0; i<4; i++)
@@ -295,10 +310,7 @@ bool build_and_send_msg(uint16_t max_time, ublox_result_code_t *control, Semapho
 
   if(clear_result_code(control))
   {
-    success = send_and_receive_at_new(server_tx_array, 
-                                  max_time, 
-                                  mutex, 
-                                  control);
+    success = send_and_receive_at_new(server_tx_array, max_time, mutex, control);
   }
   return success;
 }
@@ -952,15 +964,19 @@ bool send_udp_msg(uint8_t *data_msg, uint8_t data_len)
   sprintf(array_buffer, "%d", data_len);
   if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
-      sprintf(socket_no, "%d", ublox_status_reg.CREATED_SOCKET_NO);
+    if( xSemaphoreTake( xSemaphoreSocket, ( TickType_t ) TIME_500_MS ) == pdTRUE )
+    {
 
+      sprintf(socket_no, "%d", socket_data.CREATED_SOCKET_NO);
       build_at_string(server_tx_array, AT_COM_START, AT_PLUS, AT_SEND_TO_SERVER, AT_EQUALS, 
-                      socket_no, AT_COMMA, ublox_status_reg.SERVER_IP, AT_COMMA, 
+                      socket_no, AT_COMMA, socket_data.SERVER_IP, AT_COMMA, 
                       DRONEID_SERVER_UDP_PORT, AT_COMMA, array_buffer, AT_END_OF_MSG, NULL);
 
       ublox_status_reg.MODEM_READY_FOR_DATA = NONE_RESULT_CODE;
       ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-      xSemaphoreGive( xSemaphoreUbloxStatusReg );
+      xSemaphoreGive( xSemaphoreSocket );
+    }
+    xSemaphoreGive( xSemaphoreUbloxStatusReg );
   
     if(send_and_receive_at(server_tx_array, 
                                   OPEN_MSG_TIME_MS, 
@@ -1122,10 +1138,10 @@ bool build_udp_tracking_msg(uint16_t *lenght, uint8_t *data_msg)
         xSemaphoreGive( xSemaphoreBattVoltage );
         data_msg[msg_size++] = msg_buffer;
 
-        if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
+        if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_500_MS ) == pdTRUE )
         {
-          data_msg[msg_size++] = ublox_status_reg.SIGNAL_Q_VAR;
-          xSemaphoreGive( xSemaphoreUbloxStatusReg );
+          data_msg[msg_size++] = gsm_signal_and_signal.SIGNAL_Q_VAR;
+          xSemaphoreGive( xSemaphoreCellId );
 
           checksum = crcFast(data_msg, msg_size);
           data_msg[msg_size++] = (uint8_t)(checksum >> 8);
@@ -1248,15 +1264,18 @@ bool send_udp_stop_msg(uint8_t stop_condition)
       sprintf(array_buffer, "%d", msg_len);
       if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
       {
-        sprintf(socket_no, "%d", ublox_status_reg.CREATED_SOCKET_NO);
-        ublox_status_reg.MODEM_READY_FOR_DATA = NONE_RESULT_CODE;
-        ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
+        if( xSemaphoreTake( xSemaphoreSocket, ( TickType_t ) TIME_500_MS ) == pdTRUE )
+        {
+          sprintf(socket_no, "%d", socket_data.CREATED_SOCKET_NO);
+          ublox_status_reg.MODEM_READY_FOR_DATA = NONE_RESULT_CODE;
+          ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
 
-        sprintf(socket_no, "%d", ublox_status_reg.CREATED_SOCKET_NO);
-        build_at_string(server_tx_array, AT_COM_START, AT_PLUS, AT_SEND_TO_SERVER, AT_EQUALS, 
-                        socket_no, AT_COMMA, ublox_status_reg.SERVER_IP, AT_COMMA, 
-                        DRONEID_SERVER_UDP_PORT, AT_COMMA, array_buffer, AT_END_OF_MSG, NULL);
-
+          sprintf(socket_no, "%d", socket_data.CREATED_SOCKET_NO);
+          build_at_string(server_tx_array, AT_COM_START, AT_PLUS, AT_SEND_TO_SERVER, AT_EQUALS, 
+                          socket_no, AT_COMMA, socket_data.SERVER_IP, AT_COMMA, 
+                          DRONEID_SERVER_UDP_PORT, AT_COMMA, array_buffer, AT_END_OF_MSG, NULL);
+          xSemaphoreGive( xSemaphoreSocket );
+        }
         xSemaphoreGive( xSemaphoreUbloxStatusReg );
         if(send_and_receive_at_ignore_pwr(server_tx_array, 
                                           OPEN_MSG_TIME_MS, 
@@ -1297,10 +1316,13 @@ bool read_udp_no_of_msg_bytes()
   uint8_t socket_no[2], byte_to_read[2];
   if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
-    sprintf(socket_no, "%d", ublox_status_reg.CREATED_SOCKET_NO);
-    ublox_status_reg.UDP_READING_NO_OF_BYTES = ublox_status_reg.UDP_NO_OF_BYTES_TO_READ;
-    sprintf(byte_to_read, "%d", ublox_status_reg.UDP_READING_NO_OF_BYTES  );
-
+    if( xSemaphoreTake( xSemaphoreSocket, ( TickType_t ) TIME_500_MS ) == pdTRUE )
+    {
+      sprintf(socket_no, "%d", socket_data.CREATED_SOCKET_NO);
+      ublox_status_reg.UDP_READING_NO_OF_BYTES = ublox_status_reg.UDP_NO_OF_BYTES_TO_READ;
+      sprintf(byte_to_read, "%d", ublox_status_reg.UDP_READING_NO_OF_BYTES  );
+      xSemaphoreGive(xSemaphoreSocket);
+    }
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
 
     build_at_string(server_tx_array,
@@ -1446,16 +1468,16 @@ bool build_gsm_nw_string(uint16_t *lenght, uint8_t *data_msg)
 
     if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_500_MS ) == pdTRUE )
     {
-      data_msg[msg_size++] = (uint8_t)(mob_country_code >> 8);
-      data_msg[msg_size++] = (uint8_t)mob_country_code;
-      data_msg[msg_size++] = (uint8_t)(mob_network_code >> 8);
-      data_msg[msg_size++] = (uint8_t)mob_network_code;
-      data_msg[msg_size++] = (uint8_t)(mob_location_area_code >> 8);
-      data_msg[msg_size++] = (uint8_t)mob_location_area_code;
-      data_msg[msg_size++] = (uint8_t)(mob_cell_id_code >> 24);
-      data_msg[msg_size++] = (uint8_t)(mob_cell_id_code >> 16);
-      data_msg[msg_size++] = (uint8_t)(mob_cell_id_code >> 8);
-      data_msg[msg_size++] = (uint8_t)mob_cell_id_code;
+      data_msg[msg_size++] = (uint8_t)(gsm_signal_and_signal.mob_country_code >> 8);
+      data_msg[msg_size++] = (uint8_t)gsm_signal_and_signal.mob_country_code;
+      data_msg[msg_size++] = (uint8_t)(gsm_signal_and_signal.mob_network_code >> 8);
+      data_msg[msg_size++] = (uint8_t)gsm_signal_and_signal.mob_network_code;
+      data_msg[msg_size++] = (uint8_t)(gsm_signal_and_signal.mob_location_area_code >> 8);
+      data_msg[msg_size++] = (uint8_t)gsm_signal_and_signal.mob_location_area_code;
+      data_msg[msg_size++] = (uint8_t)(gsm_signal_and_signal.mob_cell_id_code >> 24);
+      data_msg[msg_size++] = (uint8_t)(gsm_signal_and_signal.mob_cell_id_code >> 16);
+      data_msg[msg_size++] = (uint8_t)(gsm_signal_and_signal.mob_cell_id_code >> 8);
+      data_msg[msg_size++] = (uint8_t)gsm_signal_and_signal.mob_cell_id_code;
 
       xSemaphoreGive(xSemaphoreCellId);
 
@@ -1487,18 +1509,16 @@ bool send_gsm_nw_msg()
       {
         if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
         {
-          received_resp_cell_id = false;
+          gsm_signal_and_signal.received_resp_cell_id = false;
           send_msg_count_cell_id = server_msg_count_id;
           xSemaphoreGive(xSemaphoreServerFlightMsgs);
-          xSemaphoreGive(xSemaphoreCellId);
-          
-          if(send_udp_msg(data_msg, msg_len))
-          {
-            success = true;
-          }
         }
-        else
-          xSemaphoreGive(xSemaphoreCellId);
+        
+        if(send_udp_msg(data_msg, msg_len))
+        {
+          success = true;
+        }
+        xSemaphoreGive(xSemaphoreCellId);
       }
     }
   }

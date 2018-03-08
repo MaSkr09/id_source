@@ -183,7 +183,11 @@ bool read_data_from_server(uint8_t *str)
   }
   else if((*str>>4) == UDP_GSM_AREA_MSG_TYPE)
   {
-    received_resp_cell_id = true;
+    if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_500_MS ) == pdTRUE )
+    {
+      gsm_signal_and_signal.received_resp_cell_id = true;
+      xSemaphoreGive(xSemaphoreCellId);
+    }
     echo_cell_info_msg_count = (0x0F &(*str));
     success = true;
   }
@@ -199,14 +203,18 @@ bool receive_msg_from_server(uint8_t *str)
   bool received_line = false;
   bool data = true, receive_server_data = false, ignore_msg_read = false;
   uint16_t cnt, timer_var = 0, msg_offset = 0, msg_size = 0;
+  uint16_t str_header_size;
 
   for(cnt = 0; *(str+cnt)!= NULL; cnt++){}
 
   if(ublox_status_reg.UDP_READING_NO_OF_BYTES == 0)
     ignore_msg_read = true;
 
-  uint16_t str_header_size = sizeof(AT_READ_MSG_FROM_SERVER)+1+sizeof(ublox_status_reg.SERVER_IP)+sizeof(DRONEID_SERVER_UDP_PORT) + 2;
-//  vTaskDelay(100);
+  if( xSemaphoreTake( xSemaphoreSocket, ( TickType_t ) TIME_500_MS ) == pdTRUE )
+  {
+    str_header_size = sizeof(AT_READ_MSG_FROM_SERVER)+1+sizeof(socket_data.SERVER_IP)+sizeof(DRONEID_SERVER_UDP_PORT) + 2;
+    xSemaphoreGive(xSemaphoreSocket);
+  }
 
   while((!received_line) && timer_var < MAXIMUM_RECEIVE_TIME_MS )
   {
@@ -294,7 +302,11 @@ void get_type(uint8_t *str)
     for(bar = 0; *(str+bar)!= NULL; bar++){}
     if((*(str+(bar-2)) >= '0') && (*(str+(bar-2)) < '7'))
     {
-      ublox_status_reg.CREATED_SOCKET_NO = atoi(str+(bar-2));
+      if( xSemaphoreTake( xSemaphoreSocket, ( TickType_t ) TIME_200_MS ) == pdTRUE )
+      {
+        socket_data.CREATED_SOCKET_NO = atoi(str+(bar-2));
+        xSemaphoreGive( xSemaphoreSocket );
+      }
     }
     /* Get result code */
     if(receive_data_line(str, TIME_500_MS))
@@ -303,17 +315,28 @@ void get_type(uint8_t *str)
 
   else if(strncmp(str+1, AT_RESOLVE_SERVER_IP, sizeof(AT_RESOLVE_SERVER_IP)-1)==0)
   {
-    for(bar = 0; *(str+bar)!= NULL; bar++){}
-    strncpy(ublox_status_reg.SERVER_IP, str+9, bar-10);
-      if(receive_data_line(str, TIME_500_MS))
-        get_result_code(str, &ublox_status_reg.SERVER_IP_RESULT_CODE);
+    if( xSemaphoreTake( xSemaphoreSocket, ( TickType_t ) TIME_200_MS ) == pdTRUE )
+    {
+
+      for(bar = 0; *(str+bar)!= NULL; bar++){}
+      {
+         strncpy(socket_data.SERVER_IP, str+9, bar-10);
+      }
+      xSemaphoreGive( xSemaphoreSocket );
+    }
+    if(receive_data_line(str, TIME_500_MS))
+      get_result_code(str, &ublox_status_reg.SERVER_IP_RESULT_CODE);
   }
 
   else if(strncmp(str+1, AT_QUALITY, sizeof(AT_QUALITY)-1)==0)
   {
-    ublox_status_reg.SIGNAL_Q_VAR = atoi(str+5);
+      if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_200_MS ) == pdTRUE )
+      {
+        gsm_signal_and_signal.SIGNAL_Q_VAR = atoi(str+5);
+        xSemaphoreGive( xSemaphoreCellId );
+      }
   }
-    
+
   else if(*str == '@')
   {
     ublox_status_reg.MODEM_READY_FOR_DATA = OK_RESULT_CODE;
@@ -390,8 +413,8 @@ void get_type(uint8_t *str)
   {
     if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_200_MS ) == pdTRUE )
     {
-      mob_location_area_code = (uint16_t)strtoul(str+13, NULL, 16);
-      mob_cell_id_code = (uint32_t)strtoul(str+20, NULL, 16);
+      gsm_signal_and_signal.mob_location_area_code = (uint16_t)strtoul(str+13, NULL, 16);
+      gsm_signal_and_signal.mob_cell_id_code = (uint32_t)strtoul(str+20, NULL, 16);
       xSemaphoreGive( xSemaphoreCellId );
     }
   }
@@ -401,8 +424,8 @@ void get_type(uint8_t *str)
     if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_200_MS ) == pdTRUE )
     {
       foo = atoi(str+11);
-      mob_country_code = foo/100;
-      mob_network_code = foo%100;
+      gsm_signal_and_signal.mob_country_code = foo/100;
+      gsm_signal_and_signal.mob_network_code = foo%100;
       xSemaphoreGive( xSemaphoreCellId );
     }
   }

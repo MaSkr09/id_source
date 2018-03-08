@@ -116,7 +116,7 @@ extern QueueHandle_t xQueueSlipData;
 
 /* Ublox mutex protected data register */
 extern SemaphoreHandle_t xSemaphoreUbloxStatusReg;
-extern ublox_reg_t ublox_status_reg;
+extern ublox_receive_results_t ublox_status_reg;
 
 /* Protected gga msg */
 extern SemaphoreHandle_t xSemaphoreGgaMsg;
@@ -154,13 +154,10 @@ extern uint8_t serv_cmd;
 
 /* Protected cell id and area code */
 extern SemaphoreHandle_t xSemaphoreCellId;
-extern bool received_resp_cell_id;
-extern uint16_t mob_country_code;
-extern uint16_t mob_network_code;
-extern uint16_t mob_location_area_code;
-extern uint32_t mob_cell_id_code;
-extern uint16_t pre_mob_location_area_code;
-extern uint32_t pre_mob_cell_id_code;
+extern ublox_gsm_sign_t gsm_signal_and_signal;
+
+extern SemaphoreHandle_t xSemaphoreSocket;
+extern ublox_socket_t socket_data;
 
 // Timer to update gsm info
 extern TimerHandle_t xHandleGSMInfoTimer;
