@@ -35,6 +35,7 @@
 #include "tim.h"
 #include "main.h"
 #include "indicator_task.h"
+#include "id_config.h"
 
 #define LOOP_SLEEP_TIME_MS      10
 #define DELAY_500_MS            500

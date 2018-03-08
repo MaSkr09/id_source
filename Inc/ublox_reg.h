@@ -71,47 +71,6 @@ typedef struct
 /***************************************************************************/
 /* Global defines */
 /***************************************************************************/
-/* droneid server settings */
-#define GMS_MSG_PERIOD_S              15
-
-#define DRONE_ID_NUMBER              (uint32_t)150
-#define PROTOCOL_VERSION              0
-#define FIRMWARE_VERSION_NO           2.2
-#define HW_VERSION_NO                 2.1
-
-#define UDP_START_MSG_TYPE            1
-#define UDP_STOP_MSG_TYPE             2
-#define UDP_TRACK_MSG_TYPE            3
-#define UDP_GPGSV_MSG_TYPE            4
-#define UDP_GLGSV_MSG_TYPE            5
-#define UDP_GSM_AREA_MSG_TYPE         6
-
-#define DEBUG_TRANSMIT_TYPE           15
-
-#define SERVER_FLIGHT_PER_REJECTED    0
-#define SERVER_FLIGHT_PER_ACCEPTED    1
-#define SERVER_NOT_CONNECTED          2
-
-#define GNSS_MIN_SAT                  4
-
-
-#define LOW_V_LIM                     3.15
-#define LOW_V_CNT_LIM                 10
-
-#define ERROR_CODE_USER_SHUT_DOWN   0
-#define ERROR_CODE_SERVER_PWR_DOWN  1
-#define ERROR_CODE_LOW_BATT_V       2
-
-#define ERROR_CODE_ID_TRACK_POS     129
-#define ERROR_CODE_GET_GSV          130
-#define ERROR_CODE_GET_GGA          131
-#define ERROR_CODE_GET_GSM_LOC      132
-#define ERROR_CODE_SEND_GSM_LOC     133
-#define ERROR_CODE_GSM_RSSI         134
-
-#define ERROR_CODE_MISSING_RESP     140
-
-
 #define AT_COM_START            "AT"
 #define AT_PLUS                 "+"
 #define AT_END_OF_MSG           "\r\n\000"

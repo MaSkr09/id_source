@@ -41,6 +41,8 @@
 #include "ublox_reg.h"
 #include "ublox_data_reader_task.h"
 #include "server_settings.h"
+#include "id_config.h"
+#include "global_defines.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,15 +50,7 @@
 
 #define BUFFER_LENGTH                 20
 #define DATA_READER_TASK_DELAY_MS     200
-#define BLOCK_TIME_0_MS               0
-#define DELAY_1_MS                    1
-#define DELAY_20_MS                   20
-#define DELAY_100_MS                  100
-#define DELAY_200_MS                  200
-#define DELAY_500_MS                  500
-#define DELAY_1000_MS                 1000
 
-#define MS_TO_SEC                     1000
 #define TIMER_BLOCK_TIME_MS           1000
 
 #define UART_RECEIVE_LOOP_MS          5
@@ -156,7 +150,7 @@ bool read_data_from_server(uint8_t *str)
   bool success = false;
   if((*str>>4) == UDP_START_MSG_TYPE)
   {
-    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
     {
       echo_start_msg_count = (0x0F &(*str));
       xSemaphoreGive(xSemaphoreServerFlightMsgs);
@@ -165,7 +159,7 @@ bool read_data_from_server(uint8_t *str)
   }
   else if((*str>>4) == UDP_STOP_MSG_TYPE)
   {
-    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
     {
       echo_stop_msg_count = (0x0F &(*str));
       xSemaphoreGive(xSemaphoreServerFlightMsgs);
@@ -174,7 +168,7 @@ bool read_data_from_server(uint8_t *str)
   }
   else if((*str>>4) == UDP_TRACK_MSG_TYPE)
   {
-    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
     {
       echo_msg_count_cell_id = (0x0F &(*str));
       new_server_msg_time_interval = *(str+1);
@@ -277,19 +271,19 @@ void get_type(uint8_t *str)
 
   if(strncmp(str, AT_CPIN_READY_CODE, sizeof(AT_CPIN_READY_CODE)-1)==0)
   {
-    if(receive_data_line(str, DELAY_500_MS))
+    if(receive_data_line(str, TIME_500_MS))
       get_result_code(str, &ublox_status_reg.CPIN_RESULT_CODE );
   }
 
   else if((strncmp(str, AT_DISABLE_ECHO, sizeof(AT_DISABLE_ECHO)-1)==0)||(strncmp(str, DISABLE_ECHO, sizeof(DISABLE_ECHO))==0))
   {
-    if(receive_data_line(str, DELAY_500_MS))
+    if(receive_data_line(str, TIME_500_MS))
       get_result_code(str, &ublox_status_reg.DIS_ECHO_RESULT_CODE );
   }
 
   else if(strncmp(str, CGATT_SUCCES, sizeof(CGATT_SUCCES)-1)==0)
   {
-    if(receive_data_line(str, DELAY_500_MS))
+    if(receive_data_line(str, TIME_500_MS))
       get_result_code(str, &ublox_status_reg.CGATT_RESULT_CODE );
   }
 
@@ -303,7 +297,7 @@ void get_type(uint8_t *str)
       ublox_status_reg.CREATED_SOCKET_NO = atoi(str+(bar-2));
     }
     /* Get result code */
-    if(receive_data_line(str, DELAY_500_MS))
+    if(receive_data_line(str, TIME_500_MS))
       get_result_code(str, &ublox_status_reg.CREATED_SOCKET_NO_RESULT_CODE);
   }
 
@@ -311,7 +305,7 @@ void get_type(uint8_t *str)
   {
     for(bar = 0; *(str+bar)!= NULL; bar++){}
     strncpy(ublox_status_reg.SERVER_IP, str+9, bar-10);
-      if(receive_data_line(str, DELAY_500_MS))
+      if(receive_data_line(str, TIME_500_MS))
         get_result_code(str, &ublox_status_reg.SERVER_IP_RESULT_CODE);
   }
 
@@ -329,7 +323,7 @@ void get_type(uint8_t *str)
   {
     if(!nmea_checksum((str+11)))
     {
-      if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) DELAY_200_MS ) == pdTRUE )
+      if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) TIME_200_MS ) == pdTRUE )
       {
         if(nmea_gpgga_parse((str+11), &gga_data))
         {
@@ -349,7 +343,7 @@ void get_type(uint8_t *str)
       bar = atoi(str+9);
       if((bar>0) && (bar<=3))
       {
-        if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) DELAY_200_MS ) == pdTRUE )
+        if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) TIME_200_MS ) == pdTRUE )
         {
           if(nmea_gpgsv_parse(str+1, &gpgsv_data[bar-1]))
           {
@@ -369,7 +363,7 @@ void get_type(uint8_t *str)
       bar = atoi(str+9);
       if((bar>0) && (bar<=3))
       {
-        if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) DELAY_200_MS ) == pdTRUE )
+        if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
         {
           if(nmea_gpgsv_parse(str+1, &glgsv_data[bar-1]))
           {
@@ -394,7 +388,7 @@ void get_type(uint8_t *str)
 
   else if(strncmp(str, AT_GPRS_NETWORK_REG_LOC, sizeof(AT_GPRS_NETWORK_REG_LOC)-1)==0)
   {
-    if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) DELAY_200_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_200_MS ) == pdTRUE )
     {
       mob_location_area_code = (uint16_t)strtoul(str+13, NULL, 16);
       mob_cell_id_code = (uint32_t)strtoul(str+20, NULL, 16);
@@ -404,7 +398,7 @@ void get_type(uint8_t *str)
 
   else if(strncmp(str, AT_DISP_OPR, sizeof(AT_DISP_OPR)-1)==0)
   {
-    if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) DELAY_200_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_200_MS ) == pdTRUE )
     {
       foo = atoi(str+11);
       mob_country_code = foo/100;
@@ -426,14 +420,14 @@ void ublox_data_reader_main(void *pvParameters)
 
   TASK_LOOP
   {
-    if(receive_data_line(receive_array, DELAY_500_MS))
+    if(receive_data_line(receive_array, TIME_500_MS))
     {
-      if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_1000_MS ) == pdTRUE )
+      if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_1000_MS ) == pdTRUE )
       {
         get_type(receive_array);
         xSemaphoreGive( xSemaphoreUbloxStatusReg );
       }
     }
-  vTaskDelay(DELAY_1_MS / portTICK_RATE_MS);
+  vTaskDelay(TIME_1_MS / portTICK_RATE_MS);
   }
 }

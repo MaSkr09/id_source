@@ -46,6 +46,9 @@
 #if defined(DEBUG) || defined(DEBUG_BARO)
 #include "debug_task.h"
 #endif
+
+#include "id_config.h"
+#include "global_defines.h"
 #include "stm32f4xx_hal.h"
 #include "adc.h"
 #include "dma.h"
@@ -64,6 +67,7 @@
 #include "barometric_sensor_task.h"
 #include "imu_task.h"
 #include "pos_est_task.h"
+#include "uart_transmit.h"
 
 #include "main.h"
 
@@ -84,6 +88,7 @@ void Error_Handler(void);
 TaskHandle_t xHandlePwrManagementTask;
 TaskHandle_t xHandleCapBtnResetTask;
 TaskHandle_t xHandleUbloxDataReaderTask;
+TaskHandle_t xHandleUartTransmitTask;
 TaskHandle_t xHandleDroneidCtrlTask;
 TaskHandle_t xHandleBatteryVoltageTask;
 TaskHandle_t xHandleIndicatorTask;
@@ -207,6 +212,7 @@ float initialBatteryVoltage = 0.0;
 /* Receive queues */
 QueueHandle_t xQueueUbloxReceive;
 QueueHandle_t xQueueAuxReceive;
+QueueHandle_t xQueueUartTransmit;
 
 /* Receive buffers */
 uint8_t uart3_rec_buffer[10];
@@ -442,6 +448,7 @@ void main(void)
   /* Queues */
   xQueueUbloxReceive = xQueueCreate( 512, sizeof( uint8_t ) );
   xQueueAuxReceive = xQueueCreate( 20, sizeof( uint8_t ) );
+  xQueueUartTransmit = xQueueCreate( 256, sizeof( uint8_t ) );
 
   /* Debug queue */
 #if defined(DEBUG) || defined(DEBUG_BARO)
@@ -453,7 +460,7 @@ void main(void)
   xTaskCreate( pwr_management_main, "PwrManagement", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandlePwrManagementTask );
   xTaskCreate( cap_btn_reset_main, "CapBtnReset", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleCapBtnResetTask );
   xTaskCreate( ublox_data_reader_main, "UbloxDataReader", 1024, ( void * ) NULL, tskIDLE_PRIORITY+10, &xHandleUbloxDataReaderTask );
-//  xTaskCreate( ublox_data_writer_main, "UbloxDataWriter", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleUbloxDataWriterTask );
+  xTaskCreate( uart_data_task, "UbloxDataWriter", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleUartTransmitTask );
   xTaskCreate( droneid_ctrl_main, "UbloxCtrl", 4096, ( void * ) NULL, tskIDLE_PRIORITY+3, &xHandleDroneidCtrlTask );
 
   xTaskCreate( pos_est_task, "posEst", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandlePosEstTask );

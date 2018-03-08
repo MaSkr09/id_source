@@ -221,6 +221,7 @@ extern uint8_t uart6_rec_buffer[10];
 /***************************************************************************/
 extern QueueHandle_t xQueueUbloxReceive;
 extern QueueHandle_t xQueueAuxReceive;
+extern QueueHandle_t xQueueUartTransmit;
 
 /***************************************************************************/
 /* Global task handles */
@@ -228,6 +229,7 @@ extern QueueHandle_t xQueueAuxReceive;
 extern TaskHandle_t xHandlePwrManagementTask;
 extern TaskHandle_t xHandleCapBtnResetTask;
 extern TaskHandle_t xHandleUbloxDataReaderTask;
+extern TaskHandle_t xHandleUartTransmitTask;
 extern TaskHandle_t xHandleDroneidCtrlTask;
 extern TaskHandle_t xHandleBatteryVoltageTask;
 extern TaskHandle_t xHandleIndicatorTask;

@@ -24,112 +24,34 @@
 * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *****************************************************************************
-* File: ublox_data_writer.c
+* File: uart_transmit.c
 * Purpose: Build string to send to ublox SARA G3 module
 * Project: DroneID v2
 * Author: Martin Skriver <MaSkr@mmmi.sdu.dk> & <MaSkr09@gmail.com>
 * ****************************************************************************
 * Log:
 * Created:  2017-01-02 Martin Skriver, Source written
-* TODO CHANGE NAME
+* Created:  2018-03-07 Martin Skriver, File renamed to be generic
 ****************************************************************************/
-#include "ublox_data_writer.h"
-#include "main.h"
-#include "usart.h"
-#include "ublox_reg.h"
-
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
-
-#define RESET_TIME_MS                 60
-#define PWR_ON_TIME_MS                10
-
-#define TRANSMIT_TIMEOUT_MS         100
-#define TRANSMIT_LOOP_MS            2
-
-uint8_t transmit_array[256];
-uint8_t server_msg_array[256];
-
+#ifndef _UART_TRANSMIT_H
+#define _UART_TRANSMIT_H
 
 /***************************************************************************/
-/* Transmit string */
+/* Includes */
 /***************************************************************************/
-bool transmit_string(uint8_t *str)
-{
-  bool success = false;
-  uint16_t size;
-  uint16_t timeout_counter = 0;
-  for(size = 0; str[size]!='\000'; size++){}
-
-  if(HAL_UART_Transmit_DMA(&huart3, str, size)!= HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  while((ublox_trasnmit_complete != APP_TRUE) && (timeout_counter < TRANSMIT_TIMEOUT_MS))
-  {
-    vTaskDelay(TRANSMIT_LOOP_MS / portTICK_RATE_MS);
-    timeout_counter += TRANSMIT_TIMEOUT_MS;
-  }
-
-  if(ublox_trasnmit_complete == APP_TRUE)
-  {
-    success = true;
-  }
-  ublox_trasnmit_complete = APP_FALSE;
-  return success;
-}
+#include <stdint.h>
+#include <stdbool.h>
+/***************************************************************************/
+/* Global types and functions */
+/***************************************************************************/
 
 /***************************************************************************/
-/* Transmit array */
+/* Global functions */
 /***************************************************************************/
-bool transmit_array_bytes(uint8_t *str, uint8_t array_size)
-{
-  bool success = false;
-  uint16_t timeout_counter = 0;
-  if(HAL_UART_Transmit_DMA(&huart3, str, array_size)!= HAL_OK)
-  {
-    Error_Handler();
-  }
-  
-  while((ublox_trasnmit_complete != APP_TRUE) && (timeout_counter < TRANSMIT_TIMEOUT_MS))
-  {
-    vTaskDelay(TRANSMIT_LOOP_MS / portTICK_RATE_MS);
-    timeout_counter += TRANSMIT_LOOP_MS;
-  }
+//bool transmit_string(uint8_t *str);
+//bool transmit_array_bytes(uint8_t *str, uint8_t array_size);
+void build_at_string(uint8_t *array, uint8_t *command, ...);
 
-  if(ublox_trasnmit_complete == APP_TRUE)
-  {
-    success = true;
-  }
+void uart_data_task(void *pvParameters);
 
-  ublox_trasnmit_complete = APP_FALSE;
-  return success;
-}
-
-/***************************************************************************/
-/* Build at string */
-/***************************************************************************/
-void build_at_string(uint8_t *array, uint8_t *command, ...)
-{
-  va_list ap;
-  uint8_t *ptr;
-  va_start(ap, command);
-
-  /* Copy msg content into array */
-  ptr = command;
-
-  /* Copy start of msg into array */
-  strcpy(array, "");
-
-  while(ptr != NULL)
-  {
-    /* Copy data into array */
-    strcat(array, ptr);
-    ptr = va_arg(ap, uint8_t*);
-  }
-  va_end(ap);
-}
-
+#endif /* _UART_TRANSMIT_H */

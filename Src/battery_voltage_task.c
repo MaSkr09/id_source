@@ -39,6 +39,7 @@
 #include "main.h"
 #include "adc.h"
 #include "battery_voltage_task.h"
+#include "id_config.h"
 
 /***************************************************************************/
 /* Defines */

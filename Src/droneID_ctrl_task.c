@@ -39,9 +39,9 @@
 #include "pwr_management_task.h"
 #include "main.h"
 #include "ublox_gnss_gsm_driver.h"
-#include "ublox_data_writer.h"
+#include "uart_transmit.h"
 #include "droneID_ctrl_task.h"
-
+#include "id_config.h"
 /***************************************************************************/
 /* Defines */
 /***************************************************************************/

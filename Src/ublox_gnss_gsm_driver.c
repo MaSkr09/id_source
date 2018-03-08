@@ -40,21 +40,18 @@
 #include "slip.h"
 #include "crc.h"
 #include "main.h"
-#include "ublox_data_writer.h"
+#include "uart_transmit.h"
 #include "ublox_gnss_gsm_driver.h"
 #include "ublox_private_token.h"
 #include "server_settings.h"
+#include "id_config.h"
+#include "global_defines.h"
 
 
 /***************************************************************************/
 /* Defines */
 /***************************************************************************/
 #define RESP_LOOP_TIME_MS             10
-#define DELAY_0_MS                    0
-#define DELAY_5_MS                    5
-#define DELAY_20_MS                   20
-#define DELAY_100_MS                  100
-#define DELAY_500_MS                  500
 #define NUMBER_0                      0
 
 // GSM
@@ -69,8 +66,8 @@
 #define DIS_ECHO_MAX_RETRY            2
 #define PIN_CHECK_RESP_TIME_MS        10000
 #define PIN_CHECK_MAX_RETRY           3
-#define HEX_MODE_RESP_TIME_MS     500
-#define HEX_MODE_MAX_RETRY        2
+#define HEX_MODE_RESP_TIME_MS         500
+#define HEX_MODE_MAX_RETRY            2
 #define GPRS_ATTACH_RESP_TIME_MS      1000
 #define GPRS_ATTACH_MAX_RETRY         60
 #define PSD_RESP_TIME_MS              5000
@@ -120,7 +117,22 @@
 
 #define MAX_DATA_MSG_SIZE         256
 
+/***************************************************************************/
+/* Add data to send queue */
+/***************************************************************************/
+bool add_to_send_queue(uint8_t *data)
+{
+  bool return_value = true;
 
+  while(*data != NULL)
+  {
+    if( xQueueSendToBack( xQueueUartTransmit, ( void * ) data++, ( TickType_t ) TIME_10_MS ) != pdPASS )
+    {
+      return_value = false;
+    }
+  }
+  return return_value;
+}
 /***************************************************************************/
 /* Reset GSM modem parameters */
 /***************************************************************************/
@@ -128,7 +140,7 @@ bool reset_modem_parameters()
 {
   bool success = false;
   uint8_t i, j;
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.DIS_ECHO_RESULT_CODE = NONE_RESULT_CODE;
     ublox_status_reg.CPIN_RESULT_CODE = NONE_RESULT_CODE;
@@ -142,7 +154,7 @@ bool reset_modem_parameters()
     ublox_status_reg.UDP_READING_NO_OF_BYTES = 0;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
 
-    if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
     {
       for(i=0; i<4; i++)
       {
@@ -154,7 +166,7 @@ bool reset_modem_parameters()
       }
       xSemaphoreGive( xSemaphoreGsvMsg );
 
-      if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+      if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
       {
         gga_data.sat = 0;
         gga_data.time = 0;
@@ -185,15 +197,13 @@ bool send_and_receive_at(uint8_t *msg, uint16_t max_time, uint8_t attempts, Sema
     timer = NUMBER_0;
     if(xSemaphoreTake( xSemaphoreUbloxTransmitState, ( TickType_t ) TRANMIT_MUTEX_TIME_OUT ) == pdTRUE)
     {
-//      if(transmit_string(msg))
-//      {
-      transmit_string(msg);
+      add_to_send_queue(msg);
 #ifdef DEBUG
         debug_add_to_queue(msg);
 #endif
         while(timer < max_time && !success )
         {
-          if(xSemaphoreTake( mutex, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+          if(xSemaphoreTake( mutex, ( TickType_t ) TIME_500_MS ) == pdTRUE)
           {
             if(*control == OK_RESULT_CODE)
               success = true;
@@ -204,7 +214,6 @@ bool send_and_receive_at(uint8_t *msg, uint16_t max_time, uint8_t attempts, Sema
           }
           vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
         }
-//      }
       xSemaphoreGive(xSemaphoreUbloxTransmitState);
       counter++;
     }
@@ -277,7 +286,7 @@ bool psd_pdp_activate(void)
                   AT_PDP_ACTION, 
                   AT_END_OF_MSG, 
                   NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -309,7 +318,7 @@ bool psd_conf_ip(void)
                   AP_VAR_IP_ADDR, 
                   AT_END_OF_MSG, 
                   NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -341,7 +350,7 @@ bool PSD_PROF_CONF(void)
                   AT_APN, 
                   AT_END_OF_MSG, 
                   NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -391,7 +400,7 @@ bool pin_code_check(void)
                   AT_END_OF_MSG, 
                   NULL);
 
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.CPIN_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -415,7 +424,7 @@ bool disable_gsm_modem_echo(void)
                   AT_DISABLE_ECHO, 
                   AT_END_OF_MSG, 
                   NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.DIS_ECHO_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -440,7 +449,7 @@ bool sync_gsm_modem()
                   AT_COM_START, 
                   AT_END_OF_MSG, 
                   NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -471,7 +480,7 @@ bool power_down_gsm_modem()
                   AT_END_OF_MSG, 
                   NULL);
 
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -482,9 +491,8 @@ bool power_down_gsm_modem()
     timer = NUMBER_0;
     if(xSemaphoreTake( xSemaphoreUbloxTransmitState, ( TickType_t ) TRANMIT_MUTEX_TIME_OUT ) == pdTRUE)
     {
-      if(transmit_string(server_tx_array))
+      if(add_to_send_queue(server_tx_array))
       {
-//      transmit_string(server_tx_array);
 #ifdef DEBUG
         debug_add_to_queue(server_tx_array);
 #endif
@@ -493,7 +501,7 @@ bool power_down_gsm_modem()
           vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
           timer += RESP_LOOP_TIME_MS;
 
-          if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+          if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
           {
             if(ublox_status_reg.GP_RESULT_CODE == OK_RESULT_CODE)
               success = true;          
@@ -548,22 +556,22 @@ bool power_on_gsm_modem()
 bool connect_socket(void)
 {
   bool success = false;
-  vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+  vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
   if(check_gprs_attached())
   {
-    vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+    vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
     if(PSD_PROF_CONF())
     {
-      vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
       if(psd_conf_ip())
       {
-        vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+        vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
         if(psd_pdp_activate())
         {
-          vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+          vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
           if(open_socket())
           {
-            vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+            vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
             if(get_server_ip())
             {
               success = true;
@@ -584,10 +592,10 @@ bool init_gsm_modem(void)
   bool success = false;
   if(power_on_gsm_modem())
   {
-    vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+    vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
     if(disable_gsm_modem_echo())
     {
-      vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
       if(pin_code_check())
       {
         success = true;
@@ -596,7 +604,7 @@ bool init_gsm_modem(void)
   }
   if(!success)
   {
-    vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+    vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
     if(reset_gsm_modem())
     {
       success = false;
@@ -620,7 +628,7 @@ bool setup_store_gsv(void)
                   AT_GNSS_ENABLE, 
                   AT_END_OF_MSG, 
                   NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -648,7 +656,7 @@ bool setup_store_gga(void)
                   AT_GNSS_ENABLE, 
                   AT_END_OF_MSG, 
                   NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -676,7 +684,7 @@ bool setup_unsolicited_indication(void)
                   AT_UNSOLICITED_EN, 
                   AT_END_OF_MSG, 
                   NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -701,7 +709,7 @@ bool setup_aiding_server(void)
                   AT_COMMA, AT_VALID_WEEKS_PERIOD, AT_COMMA, AT_RESOLUTION_DAYS, AT_COMMA, AT_GNSS_TYPE,
                   AT_COMMA, AT_ASSIST_OPERATING_MODE, AT_COMMA, AT_AIDING_DATA_TYPE, AT_END_OF_MSG, NULL);
 
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -729,7 +737,7 @@ bool setup_profile(void)
                   AT_GNSS_PROFILE_NUMBER, 
                   AT_END_OF_MSG, 
                   NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -761,7 +769,7 @@ bool power_on_gnss(void)
                   GNSS_SYSTEM_GLO_GPS, 
                   AT_END_OF_MSG, 
                   NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -784,7 +792,7 @@ bool power_off_gnss(void)
   uint16_t counter = NUMBER_0;
   uint8_t server_tx_array[50];
 
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -804,7 +812,7 @@ bool power_off_gnss(void)
     timer = NUMBER_0;
     if(xSemaphoreTake( xSemaphoreUbloxTransmitState, ( TickType_t ) TRANMIT_MUTEX_TIME_OUT ) == pdTRUE)
     {
-      if(transmit_string(server_tx_array))
+      if(add_to_send_queue(server_tx_array))
       {
 //      transmit_string(server_tx_array);
 #ifdef DEBUG
@@ -815,7 +823,7 @@ bool power_off_gnss(void)
           vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
           timer += RESP_LOOP_TIME_MS;
 
-          if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+          if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
           {
             if(ublox_status_reg.GP_RESULT_CODE == OK_RESULT_CODE)
               success = true;          
@@ -836,22 +844,22 @@ bool power_off_gnss(void)
 bool setup_and_start_gnss(void)
 {
   bool success = false;
-  vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+  vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
   if(setup_profile())
   {
-    vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+    vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
     if(setup_aiding_server())
     {
-      vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
       if(setup_store_gga())
       {
-        vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+        vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
         if(setup_store_gsv())
         {
-          vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+          vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
           if(setup_unsolicited_indication())
           {
-            vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+            vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
             if(power_on_gnss())
             {
               success = true;
@@ -876,7 +884,7 @@ bool update_rssi(void)
                   AT_QUALITY,
                   AT_END_OF_MSG, NULL);
 
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -905,7 +913,7 @@ bool set_netw_reg_loc_urc(void)
                   AT_EN_NETW_REG_URC
                   AT_END_OF_MSG, NULL);
 
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -933,7 +941,7 @@ bool read_netw_reg_loc(void)
                   AT_READ,
                   AT_END_OF_MSG, NULL);
 
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -961,7 +969,7 @@ bool set_disp_operator(void)
                   AT_EQUALS,
                   AT_OPR_NUM_FORM,
                   AT_END_OF_MSG, NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -988,7 +996,7 @@ bool build_udp_start_string(uint16_t *lenght, uint8_t *data_msg)
   crc checksum;
 
 
-  if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+  if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
     msg_id_var = (uint8_t)(UDP_START_MSG_TYPE << 4);
     msg_id_var |= (0x0F & (server_msg_count_id++ ));
@@ -1003,7 +1011,7 @@ bool build_udp_start_string(uint16_t *lenght, uint8_t *data_msg)
     data_msg[msg_size++] = (uint8_t) (FIRMWARE_VERSION_NO*10);
     data_msg[msg_size++] = (uint8_t) (HW_VERSION_NO*10);
 
-    if( xSemaphoreTake( xSemaphoreBattVoltage, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreBattVoltage, ( TickType_t ) TIME_500_MS ) == pdTRUE )
     {
       msg_buffer = ((initialBatteryVoltage-2.9)*255/1.4);
       xSemaphoreGive( xSemaphoreBattVoltage );
@@ -1031,7 +1039,7 @@ bool send_udp_msg(uint8_t *data_msg, uint8_t data_len)
   uint8_t server_tx_array[100];
   uint8_t array_buffer[3], socket_no[2];
   sprintf(array_buffer, "%d", data_len);
-  if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+  if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
       sprintf(socket_no, "%d", ublox_status_reg.CREATED_SOCKET_NO);
 
@@ -1049,14 +1057,14 @@ bool send_udp_msg(uint8_t *data_msg, uint8_t data_len)
                                   xSemaphoreUbloxStatusReg, 
                                   &ublox_status_reg.MODEM_READY_FOR_DATA ))
     {
-      vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
-      if(transmit_array_bytes(data_msg, data_len))
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+      if(add_to_send_queue(data_msg))
       {
         while((success != true) && (timer < MAX_MSG_SEND_REPONSE_MS) )
         {
           vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
           timer += RESP_LOOP_TIME_MS;
-          if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+          if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
           {
             if(ublox_status_reg.GP_RESULT_CODE == OK_RESULT_CODE)
             {
@@ -1083,7 +1091,7 @@ bool send_udp_start_tracking_msg()
   {
     if(msg_len != 0)
     {
-      vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
       if(send_udp_msg(data_msg, msg_len))
       {
         success = true;
@@ -1109,7 +1117,7 @@ bool get_gnss_gga(void)
                   AT_END_OF_MSG, 
                   NULL);
 
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -1140,7 +1148,7 @@ bool get_gnss_gsv(void)
                   NULL);
 
 
-  if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+  if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
     for(i=0; i<4; i++)
     {
@@ -1152,7 +1160,7 @@ bool get_gnss_gsv(void)
     }
     xSemaphoreGive( xSemaphoreGsvMsg );
   }
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
   {
     ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
@@ -1176,7 +1184,7 @@ bool build_udp_tracking_msg(uint16_t *lenght, uint8_t *data_msg)
   uint8_t msg_size = 0, msg_id_var;
   crc checksum;
 
-  if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+  if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
     msg_id_var = (uint8_t)(UDP_TRACK_MSG_TYPE << 4);
     msg_id_var |= (0x0F & (server_msg_count_id++ ));
@@ -1186,7 +1194,7 @@ bool build_udp_tracking_msg(uint16_t *lenght, uint8_t *data_msg)
     data_msg[msg_size++] = (uint8_t)(DRONE_ID_NUMBER >> 8);
     data_msg[msg_size++] = (uint8_t)DRONE_ID_NUMBER; 
 
-    if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
     {
       data_msg[msg_size++] = (uint8_t)(gga_data.time >> 8);
       data_msg[msg_size++] = (uint8_t)gga_data.time;
@@ -1218,13 +1226,13 @@ bool build_udp_tracking_msg(uint16_t *lenght, uint8_t *data_msg)
       data_msg[msg_size++] = (uint8_t)0; // ATTI_Y
       xSemaphoreGive( xSemaphoreGgaMsg );
 
-      if( xSemaphoreTake( xSemaphoreBattVoltage, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+      if( xSemaphoreTake( xSemaphoreBattVoltage, ( TickType_t ) TIME_500_MS ) == pdTRUE )
       {
         msg_buffer = ((batteryVoltage-2.9)*255/1.4);
         xSemaphoreGive( xSemaphoreBattVoltage );
         data_msg[msg_size++] = msg_buffer;
 
-        if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+        if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
         {
           data_msg[msg_size++] = ublox_status_reg.SIGNAL_Q_VAR;
           xSemaphoreGive( xSemaphoreUbloxStatusReg );
@@ -1251,12 +1259,12 @@ bool send_udp_tracking_msg(void)
   bool success = false;
   uint16_t msg_len = 0;
   uint8_t data_msg[MAX_DATA_MSG_SIZE], array_buffer[3], socket_no[2];
-  vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+  vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
   if(build_udp_tracking_msg(&msg_len, data_msg))
   {
     if(msg_len != 0)
     {
-      vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
       if(send_udp_msg(data_msg, msg_len))
       {
         success = true;
@@ -1278,7 +1286,7 @@ bool build_stop_udp_tracking_msg(uint16_t *lenght, uint8_t *data_msg, uint8_t st
   crc checksum;
 
   msg_id_var = (uint8_t)(UDP_STOP_MSG_TYPE << 4);
-  if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+  if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
     msg_id_var |= (0x0F & (server_msg_count_id++ ));
     xSemaphoreGive(xSemaphoreServerFlightMsgs);
@@ -1315,7 +1323,7 @@ bool send_and_receive_at_ignore_pwr(uint8_t *msg, uint16_t max_time, uint8_t att
     {
 //      if(transmit_string(msg))
 //      {
-      transmit_string(msg);
+      add_to_send_queue(msg);
 #ifdef DEBUG
         debug_add_to_queue(msg);
 #endif
@@ -1324,7 +1332,7 @@ bool send_and_receive_at_ignore_pwr(uint8_t *msg, uint16_t max_time, uint8_t att
           vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
           timer += RESP_LOOP_TIME_MS;
 
-          if(xSemaphoreTake( mutex, ( TickType_t ) DELAY_500_MS ) == pdTRUE)
+          if(xSemaphoreTake( mutex, ( TickType_t ) TIME_500_MS ) == pdTRUE)
           {
             if(*control == OK_RESULT_CODE)
               success = true;          
@@ -1354,7 +1362,7 @@ bool send_udp_stop_msg(uint8_t stop_condition)
     if(msg_len != 0)
     {
       sprintf(array_buffer, "%d", msg_len);
-      if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+      if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
       {
         sprintf(socket_no, "%d", ublox_status_reg.CREATED_SOCKET_NO);
         ublox_status_reg.MODEM_READY_FOR_DATA = NONE_RESULT_CODE;
@@ -1372,13 +1380,13 @@ bool send_udp_stop_msg(uint8_t stop_condition)
                                           xSemaphoreUbloxStatusReg, 
                                           &ublox_status_reg.MODEM_READY_FOR_DATA))
         {
-          if(transmit_array_bytes(data_msg, msg_len))
+          if(add_to_send_queue(data_msg))
           {
             while((success != true) && (timer < MAX_MSG_SEND_REPONSE_MS) )
             {
               vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
               timer += RESP_LOOP_TIME_MS;
-              if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+              if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
               {
                 if(ublox_status_reg.GP_RESULT_CODE == OK_RESULT_CODE)
                 {
@@ -1403,7 +1411,7 @@ bool read_udp_no_of_msg_bytes()
   bool success = false;
   uint8_t server_tx_array[50];
   uint8_t socket_no[2], byte_to_read[2];
-  if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+  if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
     sprintf(socket_no, "%d", ublox_status_reg.CREATED_SOCKET_NO);
     ublox_status_reg.UDP_READING_NO_OF_BYTES = ublox_status_reg.UDP_NO_OF_BYTES_TO_READ;
@@ -1449,7 +1457,7 @@ bool build_udp_gsv(uint16_t *lenght, uint8_t *data_msg, gpgsv_t *gsv_data, uint8
   data_msg[msg_size++] = (uint8_t)(DRONE_ID_NUMBER >> 8);
   data_msg[msg_size++] = (uint8_t)DRONE_ID_NUMBER; 
 
-  if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+  if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
     if(gsv_data[0].sats_in_view)
     {
@@ -1499,7 +1507,7 @@ bool send_udp_gpgsv(void)
   {
     if(msg_len != 0)
     {
-      vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
       if(send_udp_msg(data_msg, msg_len))
       {
         success = true;
@@ -1521,7 +1529,7 @@ bool send_udp_glgsv(void)
   {
     if(msg_len != 0)
     {
-      vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
       if(send_udp_msg(data_msg, msg_len))
       {
         success = true;
@@ -1543,7 +1551,7 @@ bool build_gsm_nw_string(uint16_t *lenght, uint8_t *data_msg)
   crc checksum;
 
   msg_id_var = (uint8_t)(UDP_GSM_AREA_MSG_TYPE << 4);
-  if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+  if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
     msg_id_var |= (0x0F & (server_msg_count_id++ ));
     data_msg[msg_size++] = msg_id_var;
@@ -1552,7 +1560,7 @@ bool build_gsm_nw_string(uint16_t *lenght, uint8_t *data_msg)
     data_msg[msg_size++] = (uint8_t)(DRONE_ID_NUMBER >> 8);
     data_msg[msg_size++] = (uint8_t)DRONE_ID_NUMBER;
 
-    if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_500_MS ) == pdTRUE )
     {
       data_msg[msg_size++] = (uint8_t)(mob_country_code >> 8);
       data_msg[msg_size++] = (uint8_t)mob_country_code;
@@ -1591,9 +1599,9 @@ bool send_gsm_nw_msg()
   {
     if(msg_len != 0)
     {
-      if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+      if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_500_MS ) == pdTRUE )
       {
-        if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+        if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
         {
           received_resp_cell_id = false;
           send_msg_count_cell_id = server_msg_count_id;
