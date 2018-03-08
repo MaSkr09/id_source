@@ -40,10 +40,14 @@
 /* Includes */
 /***************************************************************************/
 #include <stdint.h>
+#include <stdbool.h>
+
 /***************************************************************************/
 /* Global functions */
 /***************************************************************************/
-void debug_add_to_queue(uint8_t *str);
+bool debug_add_ascii_to_queue(uint8_t *str);
+bool debug_add_data_to_send_queue(uint8_t *data, uint16_t data_len);
+
 void debug_main_task(void *pvParameters);
 
 #endif /* _DEBUG_TASK_H */

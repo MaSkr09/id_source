@@ -82,7 +82,7 @@ bool receive_data_line(uint8_t *array, uint16_t timeout)
     *(array+2) = 0;
     received_line = true;
 #ifdef DEBUG
-    debug_add_to_queue(array);
+    debug_add_ascii_to_queue(array);
 #endif
   }
   else if(data && ((*array != '\n') && (*array != '\r') && (*array != 0)))
@@ -110,7 +110,7 @@ bool receive_data_line(uint8_t *array, uint16_t timeout)
           *(array+cnt) = '\n';
           received_line = true;
 #ifdef DEBUG
-          debug_add_to_queue(array);
+          debug_add_ascii_to_queue(array);
 #endif
         }
         else if(*(array+cnt) == '\n')
@@ -223,7 +223,7 @@ bool receive_msg_from_server(uint8_t *str)
           if(cnt>=10)
             ublox_status_reg.UDP_NO_OF_BYTES_TO_READ = atoi(str+10);
 #ifdef DEBUG
-          debug_add_to_queue(str);
+          debug_add_ascii_to_queue(str);
 #endif
         }
         else if(*(str+cnt) == '\n')
@@ -414,7 +414,7 @@ void get_type(uint8_t *str)
 void ublox_data_reader_main(void *pvParameters)
 {
 #ifdef DEBUG
-  debug_add_to_queue("Ublox data reader task: Started\n");
+  debug_add_ascii_to_queue("Ublox data reader task: Started\n");
 #endif
   vTaskDelay(DATA_READER_TASK_DELAY_MS / portTICK_RATE_MS);
 

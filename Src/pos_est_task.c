@@ -47,7 +47,7 @@
 void pos_est_task(void *pvParameters)
 {
 #ifdef DEBUG
-  debug_add_to_queue("Position estimation task : Started\n");
+  debug_add_ascii_to_queue("Position estimation task : Started\n");
 #endif
 
   // Allow other tasks to start

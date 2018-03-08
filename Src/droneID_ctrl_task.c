@@ -533,8 +533,12 @@ bool enable_get_gsm_pos(void)
 {
   bool success = false;
   vTaskDelay(20);
-  if(set_netw_reg_loc_urc())
-  {
+  while(!set_netw_reg_loc_urc())
+    vTaskDelay(20);
+
+// FIX FOR TESTING SETUP WITHOUT COUNTER IN SEND
+//  if(set_netw_reg_loc_urc())
+//  {
     vTaskDelay(20);
     if(set_disp_operator())
     {
@@ -544,7 +548,7 @@ bool enable_get_gsm_pos(void)
         success = true;
       }
     }
-  }
+//  }
   return success;
 }
 
@@ -556,7 +560,7 @@ bool init_droneid(void)
   bool success = false;
   uint8_t i;
 #ifdef DEBUG
-  debug_add_to_queue("DroneID ctrl task: Started\n");
+  debug_add_ascii_to_queue("DroneID ctrl task: Started\n");
 #endif
 
   reset_utm_var();

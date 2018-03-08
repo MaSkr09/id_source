@@ -62,7 +62,7 @@
 void reset_btn(void)
 {
 #ifdef DEBUG
-  debug_add_to_queue("cap btn: reset in progress\n");
+  debug_add_ascii_to_queue("cap btn: reset in progress\n");
 #endif
   vTaskDelay(DALAY_1000_MS / portTICK_RATE_MS);
   HAL_GPIO_WritePin(GPIO_CAP_BTN_PWR_O_GPIO_Port, GPIO_CAP_BTN_PWR_O_Pin, GPIO_PIN_SET);
@@ -70,7 +70,7 @@ void reset_btn(void)
   HAL_GPIO_WritePin(GPIO_CAP_BTN_PWR_O_GPIO_Port, GPIO_CAP_BTN_PWR_O_Pin, GPIO_PIN_RESET);
   vTaskDelay(CAP_BTN_RESET_DELAY_MS / portTICK_RATE_MS);
 #ifdef DEBUG
-  debug_add_to_queue("cap btn: reset done\n");
+  debug_add_ascii_to_queue("cap btn: reset done\n");
 #endif
 }
 
@@ -83,7 +83,7 @@ void cap_btn_reset_main(void *pvParameters)
 {
   vTaskDelay(TASK_STARTUP_DELAY_MS / portTICK_RATE_MS);
 #ifdef DEBUG
-  debug_add_to_queue("cap btn: task started\n");
+  debug_add_ascii_to_queue("cap btn: task started\n");
 #endif
   uint8_t timer;
 
@@ -102,7 +102,7 @@ void cap_btn_reset_main(void *pvParameters)
     if(HAL_GPIO_ReadPin(GPIO_VUSB_DETECT_I_GPIO_Port, GPIO_VUSB_DETECT_I_Pin))
     {
 #ifdef DEBUG
-      debug_add_to_queue("cap btn: reset time frame\n");
+      debug_add_ascii_to_queue("cap btn: reset time frame\n");
 #endif
       /* Take semaphore to avoid pwr down under reset*/
       if( xSemaphoreTake( xSemaphoreBtnCtrl, ( TickType_t ) DEFAULT_SEMAPHORE_TIME_FRAME_MS ) == pdTRUE )

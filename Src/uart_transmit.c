@@ -33,10 +33,9 @@
 * Created:  2017-01-02 Martin Skriver, Source written
 * Created:  2018-03-07 Martin Skriver, File renamed to be generic
 ****************************************************************************/
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
+#ifdef DEBUG
+#include "debug_task.h"
+#endif
 
 #include "uart_transmit.h"
 #include "main.h"
@@ -44,11 +43,43 @@
 #include "ublox_reg.h"
 #include "global_defines.h"
 
-#define PWR_ON_TIME_MS                10
-
 #define MAX_AURT_TANSMIT_ERROR        5
-#define TRANSMIT_TIMEOUT_MS         100
-#define TRANSMIT_LOOP_MS            2
+#define TRANSMIT_TIMEOUT_MS           100
+#define TRANSMIT_LOOP_MS              2
+
+/***************************************************************************/
+/* Add ascii data to send queue */
+/***************************************************************************/
+bool add_ascii_to_send_queue(uint8_t *data)
+{
+  bool return_value = true;
+  while(*data != NULL)
+  {
+    if( xQueueSendToBack( xQueueUartTransmit, ( void * ) data++, ( TickType_t ) TIME_10_MS ) != pdPASS )
+    {
+      return_value = false;
+    }
+  }
+  return return_value;
+}
+
+/***************************************************************************/
+/* Add fixed size data to send queue */
+/***************************************************************************/
+bool add_data_to_send_queue(uint8_t *data, uint16_t data_len)
+{
+  bool return_value = true;
+  uint16_t data_cnt = 0;
+  while(data_cnt < data_len)
+  {
+    if( xQueueSendToBack( xQueueUartTransmit, ( void * ) data++, ( TickType_t ) TIME_10_MS ) != pdPASS )
+    {
+      return_value = false;
+    }
+    data_cnt++;
+  }
+  return return_value;
+}
 
 /***************************************************************************/
 /* Transmit array */
@@ -78,36 +109,11 @@ bool uart_transmit_data(uint8_t *str, uint8_t array_size)
 }
 
 /***************************************************************************/
-/* Build at string */
-/* TODO MOVE THIS FUNCTION*/
-/***************************************************************************/
-void build_at_string(uint8_t *array, uint8_t *command, ...)
-{
-  va_list ap;
-  uint8_t *ptr;
-  va_start(ap, command);
-
-  /* Copy msg content into array */
-  ptr = command;
-
-  /* Copy start of msg into array */
-  strcpy(array, "");
-
-  while(ptr != NULL)
-  {
-    /* Copy data into array */
-    strcat(array, ptr);
-    ptr = va_arg(ap, uint8_t*);
-  }
-  va_end(ap);
-}
-
-/***************************************************************************/
 /* Sends data via uart if available in queue */
 /***************************************************************************/
 void uart_data_task(void *pvParameters)
 {
-  uint8_t msg[256];
+  uint8_t msg[TX_ARRAY_SIZE];
   uint16_t msg_len, error_count = 0;
 
   TASK_LOOP
@@ -116,15 +122,19 @@ void uart_data_task(void *pvParameters)
     if( xQueueReceive( xQueueUartTransmit, (msg), ( TickType_t ) TIME_1000_MS ) )
     {
       msg_len++;
+      msg[msg_len] = NULL;
       while(xQueueReceive( xQueueUartTransmit, (msg + msg_len), ( TickType_t ) TIME_1_MS ))
       {
         msg_len++;
+        msg[msg_len] = NULL;
       }
-      msg[msg_len] = NULL;
       if(!uart_transmit_data(msg, msg_len))
       {
         error_count++;
       }
+#ifdef DEBUG
+      debug_add_data_to_send_queue(msg, msg_len);
+#endif
     }
     if(error_count >= MAX_AURT_TANSMIT_ERROR)
     {

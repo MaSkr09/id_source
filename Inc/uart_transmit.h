@@ -48,8 +48,8 @@
 /***************************************************************************/
 /* Global functions */
 /***************************************************************************/
-//bool transmit_string(uint8_t *str);
-//bool transmit_array_bytes(uint8_t *str, uint8_t array_size);
+bool add_ascii_to_send_queue(uint8_t *data);
+bool add_data_to_send_queue(uint8_t *data, uint16_t data_len);
 void build_at_string(uint8_t *array, uint8_t *command, ...);
 
 void uart_data_task(void *pvParameters);

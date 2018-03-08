@@ -168,7 +168,7 @@ void pwr_down_droneid()
   while(HAL_GPIO_ReadPin(GPIO_CAP_BUTTON_I_GPIO_Port,GPIO_CAP_BUTTON_I_Pin)){}
 
 #ifdef DEBUG
-  debug_add_to_queue("pwr management task: Suspending MCU \n");
+  debug_add_ascii_to_queue("pwr management task: Suspending MCU \n");
 #endif
   
   vTaskDelay(TASK_DELAY_50_MS / portTICK_RATE_MS);
@@ -225,7 +225,7 @@ droneid_pwr_state_t get_power_mode(void)
 void pwr_management_main(void *pvParameters)
 {
 #ifdef DEBUG
-  debug_add_to_queue("pwr management task: Started\n");
+  debug_add_ascii_to_queue("pwr management task: Started\n");
 #endif
   uint32_t cnt = 0;
 
@@ -266,7 +266,7 @@ void pwr_management_main(void *pvParameters)
 #ifdef DEBUG
     else
     {
-      debug_add_to_queue("Failed to take semaphore\n");
+      debug_add_ascii_to_queue("Failed to take semaphore\n");
     }
 #endif
     if((get_power_mode() == DRONEID_PWR_OFF) || (get_power_mode() == DRONEID_PWR_OFF_LOW_BATT))

@@ -40,6 +40,7 @@
 #if defined(DEBUG) || defined(DEBUG_BARO)
 #include <__cross_studio_io.h>
 #include "debug_task.h"
+#include "global_defines.h"
 
 /***************************************************************************/
 /* Private defines */
@@ -51,18 +52,43 @@
 /***************************************************************************/
 /* Add data to debug queue */
 /***************************************************************************/
-void debug_add_to_queue(uint8_t *str)
+bool debug_add_ascii_to_queue(uint8_t *str)
 {
+  bool return_value = true;
   uint16_t offset = 0;
   if( xSemaphoreTake( xSemaphoreDebugMutex, ( TickType_t ) MUTEX_WAIT_LIM_MS ) == pdTRUE )
   {
     while( *(str+offset) != 0 )
     {
-      xQueueSendToBack(xQueueDebugQueue, (str+offset), 0);
-      offset++;
+      if(xQueueSendToBack(xQueueDebugQueue, (str+offset), 0) != pdPASS)
+        return_value = false;
+      else
+        offset++;
     }
     xSemaphoreGive(xSemaphoreDebugMutex);
   }
+  else
+  {
+    return_value = false;
+  }
+}
+
+/***************************************************************************/
+/* Add fixed size data to send queue */
+/***************************************************************************/
+bool debug_add_data_to_send_queue(uint8_t *data, uint16_t data_len)
+{
+  bool return_value = true;
+  uint16_t data_cnt = 0;
+  while(data_cnt < data_len)
+  {
+    if( xQueueSendToBack( xQueueDebugQueue, ( void * ) data++, ( TickType_t ) TIME_10_MS ) != pdPASS )
+    {
+      return_value = false;
+    }
+    data_cnt++;
+  }
+  return return_value;
 }
 
 /***************************************************************************/

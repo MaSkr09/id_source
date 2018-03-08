@@ -33,9 +33,8 @@
 * Created:  2017-05-29 Martin Skriver, Source written
 ****************************************************************************/
 #include <stdbool.h>
-#ifdef DEBUG
-#include "debug_task.h"
-#endif
+#include <stdarg.h>
+
 #include "pwr_management_task.h"
 #include "slip.h"
 #include "crc.h"
@@ -53,6 +52,7 @@
 /***************************************************************************/
 #define RESP_LOOP_TIME_MS             10
 #define NUMBER_0                      0
+#define MAX_DATA_SIZE                 512
 
 // GSM
 #define RESET_TIME_MS                 60
@@ -117,22 +117,7 @@
 
 #define MAX_DATA_MSG_SIZE         256
 
-/***************************************************************************/
-/* Add data to send queue */
-/***************************************************************************/
-bool add_to_send_queue(uint8_t *data)
-{
-  bool return_value = true;
 
-  while(*data != NULL)
-  {
-    if( xQueueSendToBack( xQueueUartTransmit, ( void * ) data++, ( TickType_t ) TIME_10_MS ) != pdPASS )
-    {
-      return_value = false;
-    }
-  }
-  return return_value;
-}
 /***************************************************************************/
 /* Reset GSM modem parameters */
 /***************************************************************************/
@@ -184,9 +169,24 @@ bool reset_modem_parameters()
 }
 
 /***************************************************************************/
+/* Clear OK result code flag */
+/***************************************************************************/
+bool clear_result_code(ublox_result_code_t * instance)
+{
+  bool result_code = false;
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_30_MS ) == pdTRUE)
+  {
+    *instance = NONE_RESULT_CODE;
+    result_code = true;
+    xSemaphoreGive(xSemaphoreUbloxStatusReg);
+  }
+  return result_code;
+}
+
+/***************************************************************************/
 /* Send command to gsm modem */
 /***************************************************************************/
-bool send_and_receive_at(uint8_t *msg, uint16_t max_time, uint8_t attempts, SemaphoreHandle_t *mutex, ublox_result_code_t *control)
+bool send_and_receive_at(uint8_t *msg, uint16_t max_time, uint16_t attempts, SemaphoreHandle_t *mutex, ublox_result_code_t *control)
 {
   bool success = false;
   uint16_t timer;
@@ -197,26 +197,108 @@ bool send_and_receive_at(uint8_t *msg, uint16_t max_time, uint8_t attempts, Sema
     timer = NUMBER_0;
     if(xSemaphoreTake( xSemaphoreUbloxTransmitState, ( TickType_t ) TRANMIT_MUTEX_TIME_OUT ) == pdTRUE)
     {
-      add_to_send_queue(msg);
-#ifdef DEBUG
-        debug_add_to_queue(msg);
-#endif
-        while(timer < max_time && !success )
+      add_ascii_to_send_queue(msg);
+      while(timer < max_time && !success )
+      {
+        if(xSemaphoreTake( mutex, ( TickType_t ) TIME_500_MS ) == pdTRUE)
         {
-          if(xSemaphoreTake( mutex, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-          {
-            if(*control == OK_RESULT_CODE)
-              success = true;
-            else
-              timer += RESP_LOOP_TIME_MS;
+          if(*control == OK_RESULT_CODE)
+            success = true;
+          else
+            timer += RESP_LOOP_TIME_MS;
 
-            xSemaphoreGive(mutex);
-          }
-          vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
+          xSemaphoreGive(mutex);
         }
+        vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
+      }
       xSemaphoreGive(xSemaphoreUbloxTransmitState);
       counter++;
     }
+  }
+  return success;
+}
+
+
+/***************************************************************************/
+/* NEW TEST Send command to gsm modem */
+/***************************************************************************/
+bool send_and_receive_at_new(uint8_t *msg, uint16_t max_time, SemaphoreHandle_t *mutex, ublox_result_code_t *control)
+{
+  bool success = false;
+  uint16_t timer;
+  uint16_t counter = NUMBER_0;
+  
+    timer = NUMBER_0;
+    if(xSemaphoreTake( xSemaphoreUbloxTransmitState, ( TickType_t ) TRANMIT_MUTEX_TIME_OUT ) == pdTRUE)
+    {
+      add_ascii_to_send_queue(msg);
+      while(timer < max_time && !success )
+      {
+        if(xSemaphoreTake( mutex, ( TickType_t ) TIME_500_MS ) == pdTRUE)
+        {
+          if(*control == OK_RESULT_CODE)
+            success = true;
+          else
+            timer += RESP_LOOP_TIME_MS;
+
+          xSemaphoreGive(mutex);
+        }
+        vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
+      }
+      xSemaphoreGive(xSemaphoreUbloxTransmitState);
+      counter++;
+    }
+  return success;
+}
+
+/***************************************************************************/
+/* Build at string */
+/***************************************************************************/
+void build_at_string(uint8_t *array, uint8_t *command, ...)
+{
+  va_list ap;
+  uint8_t *ptr;
+  va_start(ap, command);
+
+  /* Copy msg content into array */
+  ptr = command;
+  /* Copy start of msg into array */
+  strcpy(array, "");
+  while(ptr != NULL)
+  {
+    /* Copy data into array */
+    strcat(array, ptr);
+    ptr = va_arg(ap, uint8_t*);
+  }
+  va_end(ap);
+}
+
+/***************************************************************************/
+/* Send string, clear flag and receive ok from server */
+/***************************************************************************/
+bool build_and_send_msg(uint16_t max_time, ublox_result_code_t *control, SemaphoreHandle_t *mutex, uint8_t *command, ...)
+{
+  bool success = false;
+  uint8_t server_tx_array[MAX_DATA_SIZE];
+  va_list ap;
+  uint8_t *ptr;
+
+  va_start(ap, command);
+  ptr = command;
+  strcpy(server_tx_array, "");
+  while(ptr != NULL)
+  {
+    strcat(server_tx_array, ptr);
+    ptr = va_arg(ap, uint8_t*);
+  }
+  va_end(ap);
+
+  if(clear_result_code(control))
+  {
+    success = send_and_receive_at_new(server_tx_array, 
+                                  max_time, 
+                                  mutex, 
+                                  control);
   }
   return success;
 }
@@ -227,22 +309,18 @@ bool send_and_receive_at(uint8_t *msg, uint16_t max_time, uint8_t attempts, Sema
 bool get_server_ip(void)
 {
   bool success;
-  uint8_t server_tx_array[100];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  AT_RESOLVE_SERVER_IP, 
-                  AT_EQUALS, 
-                  AT_DOMAIN_NAME_TO_IP, 
-                  AT_COMMA, 
-                  DRONEID_SERVER_URL, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  success = send_and_receive_at(server_tx_array, 
-                                GET_SERV_IP_RESP_TIME_MS, 
-                                GET_SERV_IP_RESP_MAX_RETRY, 
-                                xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.SERVER_IP_RESULT_CODE);
+    success =  build_and_send_msg(GET_SERV_IP_RESP_TIME_MS, 
+                                  &ublox_status_reg.SERVER_IP_RESULT_CODE,
+                                  xSemaphoreUbloxStatusReg, 
+                                  AT_COM_START, 
+                                  AT_PLUS, 
+                                  AT_RESOLVE_SERVER_IP, 
+                                  AT_EQUALS, 
+                                  AT_DOMAIN_NAME_TO_IP, 
+                                  AT_COMMA, 
+                                  DRONEID_SERVER_URL, 
+                                  AT_END_OF_MSG, 
+                                  NULL);
   return success;
 }
 
@@ -252,20 +330,16 @@ bool get_server_ip(void)
 bool open_socket(void)
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  AT_CREATE_SOCKET, 
-                  AT_EQUALS, 
-                  AT_UDP_PROTOCOL, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  success = send_and_receive_at(server_tx_array, 
-                                open_sock_RESP_TIME_MS, 
-                                open_sock_RESP_MAX_RETRY, 
-                                xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.CREATED_SOCKET_NO_RESULT_CODE);
+  success =  build_and_send_msg(open_sock_RESP_TIME_MS, 
+                              &ublox_status_reg.CREATED_SOCKET_NO_RESULT_CODE,
+                              xSemaphoreUbloxStatusReg, 
+                              AT_COM_START, 
+                              AT_PLUS, 
+                              AT_CREATE_SOCKET, 
+                              AT_EQUALS, 
+                              AT_UDP_PROTOCOL, 
+                              AT_END_OF_MSG, 
+                              NULL);
   return success;
 }
 
@@ -275,27 +349,18 @@ bool open_socket(void)
 bool psd_pdp_activate(void)
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  AT_PACK_SWITCH_DATA_ACTION, 
-                  AT_EQUALS, 
-                  AT_PSD_PROFILE, 
-                  AT_COMMA, 
-                  AT_PDP_ACTION, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-  success = send_and_receive_at(server_tx_array, 
-                                PSD_PDP_RESP_TIME_MS, 
-                                PSD_PDP_RESP_MAX_RETRY, 
-                                xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
+  success =  build_and_send_msg(PSD_PDP_RESP_TIME_MS, 
+                              &ublox_status_reg.GP_RESULT_CODE,
+                              xSemaphoreUbloxStatusReg, 
+                              AT_COM_START, 
+                              AT_PLUS, 
+                              AT_PACK_SWITCH_DATA_ACTION, 
+                              AT_EQUALS, 
+                              AT_PSD_PROFILE, 
+                              AT_COMMA, 
+                              AT_PDP_ACTION, 
+                              AT_END_OF_MSG, 
+                              NULL);
   return success;
 }
 
@@ -305,29 +370,20 @@ bool psd_pdp_activate(void)
 bool psd_conf_ip(void)
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  AT_PACK_SWITCH_CONFIG, 
-                  AT_EQUALS, 
-                  AT_PSD_PROFILE, 
-                  AT_COMMA, 
-                  AT_IP_ADDR_PARA, 
-                  AT_COMMA, 
-                  AP_VAR_IP_ADDR, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-  success = send_and_receive_at(server_tx_array, 
-                                PSD_IP_RESP_TIME_MS, 
-                                PSD_IP_RESP_MAX_RETRY, 
-                                xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
+  success =  build_and_send_msg(PSD_IP_RESP_TIME_MS, 
+                              &ublox_status_reg.GP_RESULT_CODE,
+                              xSemaphoreUbloxStatusReg, 
+                              AT_COM_START, 
+                              AT_PLUS, 
+                              AT_PACK_SWITCH_CONFIG, 
+                              AT_EQUALS, 
+                              AT_PSD_PROFILE, 
+                              AT_COMMA, 
+                              AT_IP_ADDR_PARA, 
+                              AT_COMMA, 
+                              AP_VAR_IP_ADDR, 
+                              AT_END_OF_MSG, 
+                              NULL);
   return success;
 }
 
@@ -337,29 +393,20 @@ bool psd_conf_ip(void)
 bool PSD_PROF_CONF(void)
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  AT_PACK_SWITCH_CONFIG, 
-                  AT_EQUALS, 
-                  AT_PSD_PROFILE, 
-                  AT_COMMA, 
-                  AT_IPV4_PROTOCOL, 
-                  AT_COMMA, 
-                  AT_APN, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-  success = send_and_receive_at(server_tx_array, 
-                                PSD_RESP_TIME_MS, 
-                                PSD_RESP_MAX_RETRY, 
-                                xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
+  success =  build_and_send_msg(PSD_RESP_TIME_MS, 
+                              &ublox_status_reg.GP_RESULT_CODE,
+                              xSemaphoreUbloxStatusReg, 
+                              AT_COM_START, 
+                              AT_PLUS, 
+                              AT_PACK_SWITCH_CONFIG, 
+                              AT_EQUALS, 
+                              AT_PSD_PROFILE, 
+                              AT_COMMA, 
+                              AT_IPV4_PROTOCOL, 
+                              AT_COMMA, 
+                              AT_APN, 
+                              AT_END_OF_MSG, 
+                              NULL);
   return success;
 }
 
@@ -369,19 +416,15 @@ bool PSD_PROF_CONF(void)
 bool check_gprs_attached(void)
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  GPRS_ATTACHED, 
-                  AT_READ, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  success = send_and_receive_at(server_tx_array, 
-                                GPRS_ATTACH_RESP_TIME_MS, 
-                                GPRS_ATTACH_MAX_RETRY, 
+  success =  build_and_send_msg(GPRS_ATTACH_RESP_TIME_MS, 
+                                &ublox_status_reg.CGATT_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.CGATT_RESULT_CODE);
+                                AT_COM_START, 
+                                AT_PLUS, 
+                                GPRS_ATTACHED, 
+                                AT_READ, 
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -391,25 +434,15 @@ bool check_gprs_attached(void)
 bool pin_code_check(void)
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  CPIN_CHECK, 
-                  AT_READ, 
-                  AT_END_OF_MSG, 
-                  NULL);
-
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.CPIN_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-  success = send_and_receive_at(server_tx_array, 
-                                PIN_CHECK_RESP_TIME_MS, 
-                                PIN_CHECK_MAX_RETRY, 
+  success =  build_and_send_msg(PIN_CHECK_RESP_TIME_MS, 
+                                &ublox_status_reg.CPIN_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.CPIN_RESULT_CODE);
+                                AT_COM_START,
+                                AT_PLUS, 
+                                CPIN_CHECK, 
+                                AT_READ, 
+                                AT_END_OF_MSG,
+                                NULL);
   return success;
 }
 
@@ -419,22 +452,12 @@ bool pin_code_check(void)
 bool disable_gsm_modem_echo(void)
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_DISABLE_ECHO, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.DIS_ECHO_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-
-  success = send_and_receive_at(server_tx_array, 
-                                DIS_ECHO_RESP_TIME_MS, 
-                                DIS_ECHO_MAX_RETRY, 
+  success =  build_and_send_msg(DIS_ECHO_RESP_TIME_MS, 
+                                &ublox_status_reg.DIS_ECHO_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.DIS_ECHO_RESULT_CODE);
+                                AT_DISABLE_ECHO, 
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -444,22 +467,12 @@ bool disable_gsm_modem_echo(void)
 bool sync_gsm_modem()
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-
-  success = send_and_receive_at(server_tx_array, 
-                                SYNC_RESP_TIME_MS, 
-                                SYNC_MAX_RETRY, 
+  success =  build_and_send_msg(SYNC_RESP_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
+                                AT_COM_START, 
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -491,11 +504,8 @@ bool power_down_gsm_modem()
     timer = NUMBER_0;
     if(xSemaphoreTake( xSemaphoreUbloxTransmitState, ( TickType_t ) TRANMIT_MUTEX_TIME_OUT ) == pdTRUE)
     {
-      if(add_to_send_queue(server_tx_array))
+      if(add_ascii_to_send_queue(server_tx_array))
       {
-#ifdef DEBUG
-        debug_add_to_queue(server_tx_array);
-#endif
         while(timer < PWR_DOWN_RESP_TIME_MS && !success )
         {
           vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
@@ -557,30 +567,32 @@ bool connect_socket(void)
 {
   bool success = false;
   vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-  if(check_gprs_attached())
+//  if(check_gprs_attached())
+  while(!check_gprs_attached())
+  {
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+  }
+  if(PSD_PROF_CONF())
   {
     vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-    if(PSD_PROF_CONF())
+    if(psd_conf_ip())
     {
       vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-      if(psd_conf_ip())
+      if(psd_pdp_activate())
       {
         vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-        if(psd_pdp_activate())
+        if(open_socket())
         {
           vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-          if(open_socket())
+          if(get_server_ip())
           {
-            vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-            if(get_server_ip())
-            {
-              success = true;
-            }
+            success = true;
           }
         }
       }
     }
   }
+//  }
   return success;
 }
 
@@ -619,25 +631,16 @@ bool init_gsm_modem(void)
 bool setup_store_gsv(void)
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  AT_GET_UGGSV, 
-                  AT_EQUALS, 
-                  AT_GNSS_ENABLE, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-  success = send_and_receive_at(server_tx_array, 
-                                STORE_GSV_TIME_MS, 
-                                STORE_GSV_RESP_MAX_RETRY, 
+  success =  build_and_send_msg(STORE_GSV_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
+                                AT_COM_START, 
+                                AT_PLUS, 
+                                AT_GET_UGGSV, 
+                                AT_EQUALS, 
+                                AT_GNSS_ENABLE, 
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -647,25 +650,16 @@ bool setup_store_gsv(void)
 bool setup_store_gga(void)
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  AT_GET_UGGGA, 
-                  AT_EQUALS, 
-                  AT_GNSS_ENABLE, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-  success = send_and_receive_at(server_tx_array, 
-                                STORE_GGA_TIME_MS, 
-                                STORE_GGA_RESP_MAX_RETRY, 
+  success =  build_and_send_msg(STORE_GGA_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
+                                AT_COM_START, 
+                                AT_PLUS, 
+                                AT_GET_UGGGA, 
+                                AT_EQUALS, 
+                                AT_GNSS_ENABLE, 
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -675,25 +669,16 @@ bool setup_store_gga(void)
 bool setup_unsolicited_indication(void)
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  AT_UNSOLICITED_GNSS_MSG, 
-                  AT_EQUALS, 
-                  AT_UNSOLICITED_EN, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-  success = send_and_receive_at(server_tx_array, 
-                                UNSOL_INDIC_TIME_MS, 
-                                UNSOL_INDIC_RESP_MAX_RETRY, 
+  success =  build_and_send_msg(UNSOL_INDIC_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
+                                AT_COM_START, 
+                                AT_PLUS, 
+                                AT_UNSOLICITED_GNSS_MSG, 
+                                AT_EQUALS, 
+                                AT_UNSOLICITED_EN, 
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -703,22 +688,13 @@ bool setup_unsolicited_indication(void)
 bool setup_aiding_server(void)
 {
   bool success;
-  uint8_t server_tx_array[256];
-  build_at_string(server_tx_array, AT_COM_START, AT_PLUS, AT_AIDING_CONFIG, AT_EQUALS, AT_AIDING_SERVER_1,
+  success =  build_and_send_msg(SETUP_AIDING_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
+                                xSemaphoreUbloxStatusReg, 
+                  AT_COM_START, AT_PLUS, AT_AIDING_CONFIG, AT_EQUALS, AT_AIDING_SERVER_1,
                   AT_COMMA, AT_AIDING_SERVER_2, AT_COMMA, AT_UBLOX_PRIVATE_TOKEN, AT_COMMA, AT_VALID_DAYS,
                   AT_COMMA, AT_VALID_WEEKS_PERIOD, AT_COMMA, AT_RESOLUTION_DAYS, AT_COMMA, AT_GNSS_TYPE,
                   AT_COMMA, AT_ASSIST_OPERATING_MODE, AT_COMMA, AT_AIDING_DATA_TYPE, AT_END_OF_MSG, NULL);
-
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-  success = send_and_receive_at(server_tx_array, 
-                                SETUP_AIDING_TIME_MS, 
-                                SETUP_AIDING_RESP_MAX_RETRY, 
-                                xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
   return success;
 }
 
@@ -728,25 +704,16 @@ bool setup_aiding_server(void)
 bool setup_profile(void)
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  AT_GNSS_PROFILE, 
-                  AT_EQUALS, 
-                  AT_GNSS_PROFILE_NUMBER, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-  success = send_and_receive_at(server_tx_array, 
-                                GNSS_PROFILE_TIME_MS, 
-                                GNSS_PROFILE_RESP_MAX_RETRY, 
+  success =  build_and_send_msg(GNSS_PROFILE_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
+                                AT_COM_START, 
+                                AT_PLUS, 
+                                AT_GNSS_PROFILE, 
+                                AT_EQUALS, 
+                                AT_GNSS_PROFILE_NUMBER, 
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -756,29 +723,20 @@ bool setup_profile(void)
 bool power_on_gnss(void)
 {
   bool success;
-  uint8_t server_tx_array[50];
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  AT_GNSS_PWR_CMD, 
-                  AT_EQUALS, 
-                  AT_GNSS_PWR_ON, 
-                  AT_COMMA, 
-                  AT_ASSIST_LOCAL_AUTONOM_ONLINE, 
-                  AT_COMMA, 
-                  GNSS_SYSTEM_GLO_GPS, 
-                  AT_END_OF_MSG, 
-                  NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-  success = send_and_receive_at(server_tx_array, 
-                                GNSS_PWR_ON_TIME_MS, 
-                                GNSS_PWR_ON_RESP_MAX_RETRY, 
+  success =  build_and_send_msg(GNSS_PWR_ON_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
+                                AT_COM_START, 
+                                AT_PLUS, 
+                                AT_GNSS_PWR_CMD, 
+                                AT_EQUALS, 
+                                AT_GNSS_PWR_ON, 
+                                AT_COMMA, 
+                                AT_ASSIST_LOCAL_AUTONOM_ONLINE, 
+                                AT_COMMA, 
+                                GNSS_SYSTEM_GLO_GPS, 
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -812,12 +770,8 @@ bool power_off_gnss(void)
     timer = NUMBER_0;
     if(xSemaphoreTake( xSemaphoreUbloxTransmitState, ( TickType_t ) TRANMIT_MUTEX_TIME_OUT ) == pdTRUE)
     {
-      if(add_to_send_queue(server_tx_array))
+      if(add_ascii_to_send_queue(server_tx_array))
       {
-//      transmit_string(server_tx_array);
-#ifdef DEBUG
-        debug_add_to_queue(server_tx_array);
-#endif
         while(timer < GNSS_PWR_OFF_TIME_MS && !success )
         {
           vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
@@ -878,24 +832,14 @@ bool setup_and_start_gnss(void)
 bool update_rssi(void)
 {
   bool success = false;
-  uint8_t server_tx_array[50];
-
-  build_at_string(server_tx_array, AT_COM_START, AT_PLUS, 
-                  AT_QUALITY,
-                  AT_END_OF_MSG, NULL);
-
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-
-  success = send_and_receive_at(server_tx_array, 
-                                RSSI_TIME_MS, 
-                                RSSI_RESP_MAX_RETRY, 
+  success =  build_and_send_msg(RSSI_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
-
+                                AT_COM_START, 
+                                AT_PLUS, 
+                                AT_QUALITY,
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -905,26 +849,15 @@ bool update_rssi(void)
 bool set_netw_reg_loc_urc(void)
 {
   bool success = false;
-  uint8_t server_tx_array[50];
-
-  build_at_string(server_tx_array, AT_COM_START, 
-                  AT_GPRS_NETWORK_REG_LOC,
-                  AT_EQUALS,
-                  AT_EN_NETW_REG_URC
-                  AT_END_OF_MSG, NULL);
-
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-
-  success = send_and_receive_at(server_tx_array, 
-                                NETW_REG_LOC_TIME_MS, 
-                                NETW_REG_LOC_MAX_RETRY, 
+  success =  build_and_send_msg(NETW_REG_LOC_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
-
+                                AT_COM_START, 
+                                AT_GPRS_NETWORK_REG_LOC,
+                                AT_EQUALS,
+                                AT_EN_NETW_REG_URC
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -934,25 +867,14 @@ bool set_netw_reg_loc_urc(void)
 bool read_netw_reg_loc(void)
 {
   bool success = false;
-  uint8_t server_tx_array[50];
-
-  build_at_string(server_tx_array, AT_COM_START, 
-                  AT_GPRS_NETWORK_REG_LOC,
-                  AT_READ,
-                  AT_END_OF_MSG, NULL);
-
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-
-  success = send_and_receive_at(server_tx_array, 
-                                NETW_REG_LOC_TIME_MS, 
-                                NETW_REG_LOC_MAX_RETRY, 
+  success =  build_and_send_msg(NETW_REG_LOC_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
-
+                                AT_COM_START, 
+                                AT_GPRS_NETWORK_REG_LOC,
+                                AT_READ,
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -962,25 +884,15 @@ bool read_netw_reg_loc(void)
 bool set_disp_operator(void)
 {
   bool success = false;
-  uint8_t server_tx_array[50];
-
-  build_at_string(server_tx_array, AT_COM_START, 
-                  AT_DISP_OPR,
-                  AT_EQUALS,
-                  AT_OPR_NUM_FORM,
-                  AT_END_OF_MSG, NULL);
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-  }
-
-  success = send_and_receive_at(server_tx_array, 
-                                OPR_NAME_TIME_MS, 
-                                OPR_NAME_MAX_RETRY, 
+  success =  build_and_send_msg(OPR_NAME_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
-                                &ublox_status_reg.GP_RESULT_CODE);
-
+                                AT_COM_START, 
+                                AT_DISP_OPR,
+                                AT_EQUALS,
+                                AT_OPR_NUM_FORM,
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -994,7 +906,6 @@ bool build_udp_start_string(uint16_t *lenght, uint8_t *data_msg)
   uint32_t msg_buffer;
   uint8_t msg_size = 0, msg_id_var;
   crc checksum;
-
 
   if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
@@ -1058,7 +969,7 @@ bool send_udp_msg(uint8_t *data_msg, uint8_t data_len)
                                   &ublox_status_reg.MODEM_READY_FOR_DATA ))
     {
       vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-      if(add_to_send_queue(data_msg))
+      if(add_data_to_send_queue(data_msg, data_len))
       {
         while((success != true) && (timer < MAX_MSG_SEND_REPONSE_MS) )
         {
@@ -1107,27 +1018,15 @@ bool send_udp_start_tracking_msg()
 bool get_gnss_gga(void)
 {
   bool success = false;
-  uint8_t server_tx_array[50];
-
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  AT_GET_UGGGA, 
-                  AT_READ, 
-                  AT_END_OF_MSG, 
-                  NULL);
-
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
-
-    success = send_and_receive_at(server_tx_array, 
-                                  UPDATE_GNSS_DATA_TIME_MS, 
-                                  UPDATE_GNSS_DATA_MAX_RETRY, 
-                                  xSemaphoreUbloxStatusReg, 
-                                  &ublox_status_reg.GP_RESULT_CODE);
-  }
+  success =  build_and_send_msg(UPDATE_GNSS_DATA_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
+                                xSemaphoreUbloxStatusReg, 
+                                AT_COM_START, 
+                                AT_PLUS, 
+                                AT_GET_UGGGA, 
+                                AT_READ, 
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -1137,17 +1036,9 @@ bool get_gnss_gga(void)
 bool get_gnss_gsv(void)
 {
   bool success = false;
-  uint8_t i,j, server_tx_array[50];
+  uint8_t i,j;
 
-  build_at_string(server_tx_array, 
-                  AT_COM_START, 
-                  AT_PLUS, 
-                  AT_GET_UGGSV, 
-                  AT_READ, 
-                  AT_END_OF_MSG, 
-                  NULL);
-
-
+  // TODO Move function to nmea file
   if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
     for(i=0; i<4; i++)
@@ -1160,17 +1051,16 @@ bool get_gnss_gsv(void)
     }
     xSemaphoreGive( xSemaphoreGsvMsg );
   }
-  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    ublox_status_reg.GP_RESULT_CODE = NONE_RESULT_CODE;
-    xSemaphoreGive(xSemaphoreUbloxStatusReg);
 
-    success = send_and_receive_at(server_tx_array, 
-                                  UPDATE_GNSS_DATA_TIME_MS, 
-                                  UPDATE_GNSS_DATA_MAX_RETRY, 
-                                  xSemaphoreUbloxStatusReg, 
-                                  &ublox_status_reg.GP_RESULT_CODE);
-  }
+  success =  build_and_send_msg(UPDATE_GNSS_DATA_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
+                                xSemaphoreUbloxStatusReg, 
+                                AT_COM_START, 
+                                AT_PLUS, 
+                                AT_GET_UGGSV, 
+                                AT_READ, 
+                                AT_END_OF_MSG, 
+                                NULL);
   return success;
 }
 
@@ -1321,24 +1211,18 @@ bool send_and_receive_at_ignore_pwr(uint8_t *msg, uint16_t max_time, uint8_t att
     timer = NUMBER_0;
     if(xSemaphoreTake( xSemaphoreUbloxTransmitState, ( TickType_t ) TRANMIT_MUTEX_TIME_OUT ) == pdTRUE)
     {
-//      if(transmit_string(msg))
-//      {
-      add_to_send_queue(msg);
-#ifdef DEBUG
-        debug_add_to_queue(msg);
-#endif
-        while(timer < max_time && !success )
-        {
-          vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
-          timer += RESP_LOOP_TIME_MS;
+      add_ascii_to_send_queue(msg);
+      while(timer < max_time && !success )
+      {
+        vTaskDelay(RESP_LOOP_TIME_MS / portTICK_RATE_MS);
+        timer += RESP_LOOP_TIME_MS;
 
-          if(xSemaphoreTake( mutex, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-          {
-            if(*control == OK_RESULT_CODE)
-              success = true;          
-            xSemaphoreGive(mutex);
-          }
-//        }
+        if(xSemaphoreTake( mutex, ( TickType_t ) TIME_500_MS ) == pdTRUE)
+        {
+          if(*control == OK_RESULT_CODE)
+            success = true;          
+          xSemaphoreGive(mutex);
+        }
       }
       xSemaphoreGive(xSemaphoreUbloxTransmitState);
       counter++;
@@ -1380,7 +1264,7 @@ bool send_udp_stop_msg(uint8_t stop_condition)
                                           xSemaphoreUbloxStatusReg, 
                                           &ublox_status_reg.MODEM_READY_FOR_DATA))
         {
-          if(add_to_send_queue(data_msg))
+          if(add_ascii_to_send_queue(data_msg))
           {
             while((success != true) && (timer < MAX_MSG_SEND_REPONSE_MS) )
             {

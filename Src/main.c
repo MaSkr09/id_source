@@ -448,7 +448,7 @@ void main(void)
   /* Queues */
   xQueueUbloxReceive = xQueueCreate( 512, sizeof( uint8_t ) );
   xQueueAuxReceive = xQueueCreate( 20, sizeof( uint8_t ) );
-  xQueueUartTransmit = xQueueCreate( 256, sizeof( uint8_t ) );
+  xQueueUartTransmit = xQueueCreate( TX_ARRAY_SIZE, sizeof( uint8_t ) );
 
   /* Debug queue */
 #if defined(DEBUG) || defined(DEBUG_BARO)
@@ -460,7 +460,7 @@ void main(void)
   xTaskCreate( pwr_management_main, "PwrManagement", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandlePwrManagementTask );
   xTaskCreate( cap_btn_reset_main, "CapBtnReset", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleCapBtnResetTask );
   xTaskCreate( ublox_data_reader_main, "UbloxDataReader", 1024, ( void * ) NULL, tskIDLE_PRIORITY+10, &xHandleUbloxDataReaderTask );
-  xTaskCreate( uart_data_task, "UbloxDataWriter", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleUartTransmitTask );
+  xTaskCreate( uart_data_task, "UbloxDataWriter", 1024, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleUartTransmitTask );
   xTaskCreate( droneid_ctrl_main, "UbloxCtrl", 4096, ( void * ) NULL, tskIDLE_PRIORITY+3, &xHandleDroneidCtrlTask );
 
   xTaskCreate( pos_est_task, "posEst", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandlePosEstTask );
