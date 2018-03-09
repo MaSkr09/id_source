@@ -1108,7 +1108,6 @@ bool build_udp_tracking_msg(uint16_t *lenght, uint8_t *data_msg)
       data_msg[msg_size++] = (uint8_t)(gga_data.hdop*10);
       data_msg[msg_size++] = (uint8_t)0;// gnss SNR
 
-//      msg_buffer = (uint32_t)((double)(gga_data.lat + 180)/((double)360/0xfffffffe));
       msg_buffer = (uint32_t)((double)(gga_data.lat * degs_to_semicircles));
 
       data_msg[msg_size++] = (uint8_t)(msg_buffer >> 24);
@@ -1116,7 +1115,6 @@ bool build_udp_tracking_msg(uint16_t *lenght, uint8_t *data_msg)
       data_msg[msg_size++] = (uint8_t)(msg_buffer >> 8);
       data_msg[msg_size++] = (uint8_t)msg_buffer;
 
-//      msg_buffer = (uint32_t)((double)(gga_data.lon + 180)/((double)360/0xfffffffe));
       msg_buffer = (uint32_t)((double)(gga_data.lon * degs_to_semicircles));
       data_msg[msg_size++] = (uint8_t)(msg_buffer >> 24);
       data_msg[msg_size++] = (uint8_t)(msg_buffer >> 16);
