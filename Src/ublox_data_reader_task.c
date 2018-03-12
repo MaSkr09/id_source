@@ -44,6 +44,7 @@
 #include "server_settings.h"
 #include "id_config.h"
 #include "global_defines.h"
+#include "id_protocol_v1.h"
 
 #include <string.h>
 
@@ -113,72 +114,22 @@ bool receive_data_line(uint8_t *array, uint16_t timeout)
 }
 
 /***************************************************************************/
-/* Read msg from server */
-/***************************************************************************/
-bool read_data_from_server(uint8_t *str)
-{
-  bool success = false;
-  if((*str>>4) == UDP_START_MSG_TYPE)
-  {
-    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
-    {
-      echo_start_msg_count = (0x0F &(*str));
-      xSemaphoreGive(xSemaphoreServerFlightMsgs);
-      success = true;
-    }
-  }
-  else if((*str>>4) == UDP_STOP_MSG_TYPE)
-  {
-    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
-    {
-      echo_stop_msg_count = (0x0F &(*str));
-      xSemaphoreGive(xSemaphoreServerFlightMsgs);
-      success = true;
-    }
-  }
-  else if((*str>>4) == UDP_TRACK_MSG_TYPE)
-  {
-    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
-    {
-      echo_msg_count_cell_id = (0x0F &(*str));
-      new_server_msg_time_interval = *(str+1);
-      max_horizontal_server_msg = *(str+2);
-      max_vertical_server_msg = *(str+3);
-      flight_permission = *(str+4);
-//      serv_cmd = 0xf0;
-      serv_cmd = *(str+5);
-      xSemaphoreGive(xSemaphoreServerFlightMsgs);
-      success = true;
-    }
-  }
-  else if((*str>>4) == UDP_GSM_AREA_MSG_TYPE)
-  {
-    if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_500_MS ) == pdTRUE )
-    {
-      gsm_signal_and_signal.received_resp_cell_id = true;
-      xSemaphoreGive(xSemaphoreCellId);
-    }
-    echo_cell_info_msg_count = (0x0F &(*str));
-    success = true;
-  }
-
-  return success;
-}
-
-/***************************************************************************/
 /* Handle receive msg from server */
 /***************************************************************************/
 bool receive_msg_from_server(uint8_t *str)
 {
-  bool received_line = false;
-  bool data = true, receive_server_data = false, ignore_msg_read = false;
+  bool received_line = false, ignore_msg_read = false;
   uint16_t cnt, timer_var = 0, msg_offset = 0, msg_size = 0;
   uint16_t str_header_size;
 
   for(cnt = 0; *(str+cnt)!= NULL; cnt++){}
 
-  if(ublox_status_reg.UDP_READING_NO_OF_BYTES == 0)
-    ignore_msg_read = true;
+  if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
+  {
+    if(ublox_status_reg.UDP_READING_NO_OF_BYTES == 0)
+      ignore_msg_read = true;
+    xSemaphoreGive(xSemaphoreUbloxStatusReg);
+  }
 
   if( xSemaphoreTake( xSemaphoreSocket, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
@@ -199,7 +150,13 @@ bool receive_msg_from_server(uint8_t *str)
           *(str+cnt+1) = 0;
           received_line = true;
           if(cnt>=10)
-            ublox_status_reg.UDP_NO_OF_BYTES_TO_READ = atoi(str+10);
+          {
+            if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
+            {
+              ublox_status_reg.UDP_NO_OF_BYTES_TO_READ = atoi(str+10);
+              xSemaphoreGive(xSemaphoreUbloxStatusReg);
+            }
+          }
         }
         else if(*(str+cnt) == '\n')
         {
@@ -218,12 +175,13 @@ bool receive_msg_from_server(uint8_t *str)
           *(str+cnt) = '\n';
           *(str+cnt+1) = 0;
           received_line = true;
-          ublox_status_reg.UDP_READING_NO_OF_BYTES = 0;
-//          if(0 <= (int16_t)ublox_status_reg.UDP_NO_OF_BYTES_TO_READ - (int16_t)msg_size)
-//            ublox_status_reg.UDP_NO_OF_BYTES_TO_READ = ublox_status_reg.UDP_NO_OF_BYTES_TO_READ - msg_size;
-//          else
+          if(xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
+          {
+            ublox_status_reg.UDP_READING_NO_OF_BYTES = 0;
             ublox_status_reg.UDP_NO_OF_BYTES_TO_READ = 0;
-          read_data_from_server(str+msg_offset+2);
+            xSemaphoreGive(xSemaphoreUbloxStatusReg);
+          }
+          read_server_msg(str+msg_offset+2);
         }
       }
       cnt++;

@@ -106,9 +106,6 @@ extern SemaphoreHandle_t xSemaphoreBtnCtrl;
 extern bool i2c_data_received;
 extern SemaphoreHandle_t xSemaphoreI2CPeriph;
 
-/* ublox tx data and semaphore */
-extern SemaphoreHandle_t xSemaphoreUbloxTransmitState;
-
 extern uint8_t ublox_trasnmit_complete;
 
 /* Queue to add data msg */

@@ -435,3 +435,15 @@ double degree_to_meter_conv(gpgga_t *gga1, gpgga_t *gga2)
 	return EARTH_RADIUS_M * c;
 }
 /***************************************************************************/
+void clear_gsv_msg(gpgsv_t *gsv)
+{
+  char i,j;
+    for(i=0; i<4; i++)
+    {
+      for(j=0; j<4; j++)
+      {
+        gsv[i].sat[j].prn = -1;
+      }
+    }
+}
+/***************************************************************************/

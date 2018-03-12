@@ -43,6 +43,8 @@
 #include "ublox_reg.h"
 #include "global_defines.h"
 
+#include <string.h>
+
 #define MAX_AURT_TANSMIT_ERROR        5
 #define TRANSMIT_TIMEOUT_MS           100
 #define TRANSMIT_LOOP_MS              2
@@ -115,6 +117,7 @@ void uart_data_task(void *pvParameters)
 {
   uint8_t msg[TX_ARRAY_SIZE];
   uint16_t msg_len, error_count = 0;
+  bool send_msg = false;
 
   TASK_LOOP
   {
@@ -133,7 +136,20 @@ void uart_data_task(void *pvParameters)
         error_count++;
       }
 #ifdef DEBUG
-      debug_add_data_to_send_queue(msg, msg_len);
+// Do dirty stuff to avoid printing binary protocol msg
+      if(!send_msg)
+      {
+        debug_add_data_to_send_queue(msg, msg_len);
+
+        if(strncmp(msg+3, AT_SEND_TO_SERVER, sizeof(AT_SEND_TO_SERVER)-1)==0)
+        {
+          send_msg = true;
+        }
+      }
+      else
+      {
+        send_msg = false;
+      }
 #endif
     }
     if(error_count >= MAX_AURT_TANSMIT_ERROR)

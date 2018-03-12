@@ -125,6 +125,7 @@ int nmea_gpgsa_parse(char *nmeastr, gpgsa_t *gsa);
 int nmea_gpvtg_parse(char *nmeastr, gpvtg_t *vtg);
 int nmea_gpgsv_parse(char *nmeastr, gpgsv_t *gsv);
 double degree_to_meter_conv(gpgga_t *gga1, gpgga_t *gga2);
+void clear_gsv_msg(gpgsv_t *gsv);
 
 /***************************************************************************/
 #endif /* NMEA_H_ */

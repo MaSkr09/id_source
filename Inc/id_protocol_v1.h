@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (c) 2017, Martin Skriver <MaSkr@mmmi.sdu.dk> & <MaSkr09@gmail.com>
+* Copyright (c) 2018, Martin Skriver <MaSkr@mmmi.sdu.dk> & <MaSkr09@gmail.com>
 * All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
@@ -24,33 +24,34 @@
 * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *****************************************************************************
-* File: uart_transmit.c
-* Purpose: Build string to send to ublox SARA G3 module
+* File: id_protocol_v1.h
+* Purpose: Server msg read and build msgs 
 * Project: DroneID v2
 * Author: Martin Skriver <MaSkr@mmmi.sdu.dk> & <MaSkr09@gmail.com>
 * ****************************************************************************
 * Log:
-* Created:  2017-01-02 Martin Skriver, Source written
-* Created:  2018-03-07 Martin Skriver, File renamed to be generic
+* Created:  2018-03-12 Martin Skriver, Source written
 ****************************************************************************/
-#ifndef _UART_TRANSMIT_H
-#define _UART_TRANSMIT_H
+
+#ifndef _ID_PROTOCOL_V1_H
+#define _ID_PROTOCOL_V1_H
 
 /***************************************************************************/
 /* Includes */
 /***************************************************************************/
 #include <stdint.h>
 #include <stdbool.h>
-/***************************************************************************/
-/* Global types and functions */
-/***************************************************************************/
 
+#include "nmea.h"
 /***************************************************************************/
 /* Global functions */
 /***************************************************************************/
-bool add_ascii_to_send_queue(uint8_t *data);
-bool add_data_to_send_queue(uint8_t *data, uint16_t data_len);
+bool build_start_msg(uint16_t *lenght, uint8_t *data_msg);
+bool build_stop_msg(uint16_t *lenght, uint8_t *data_msg, uint8_t stop_condition);
+bool build_tracking_msg(uint16_t *lenght, uint8_t *data_msg);
+bool build_gsv_msg(uint16_t *lenght, uint8_t *data_msg, gpgsv_t *gsv_data, uint8_t type);
+bool build_nw_loc_msg(uint16_t *lenght, uint8_t *data_msg);
 
-void uart_data_task(void *pvParameters);
+bool read_server_msg(uint8_t *str);
 
-#endif /* _UART_TRANSMIT_H */
+#endif /* _ID_PROTOCOL_V1_H */

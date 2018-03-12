@@ -59,6 +59,7 @@ bool get_gnss_gga();
 bool get_gnss_gsv();
 bool send_udp_gpgsv();
 bool send_udp_glgsv();
+void build_at_string(uint8_t *array, uint8_t *command, ...);
 
 bool send_gsm_nw_msg();
 bool send_udp_start_tracking_msg();

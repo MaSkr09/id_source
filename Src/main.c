@@ -136,9 +136,6 @@ bool newMagData = false;
 /* Mutex to stop from pwr off when reset btn */
 SemaphoreHandle_t xSemaphoreBtnCtrl;
 
-/* Mutex for Ublox Tx */
-SemaphoreHandle_t xSemaphoreUbloxTransmitState;
-
 /*Protected barometric data */
 SemaphoreHandle_t xSemaphoreBarometricData;
 float pressure_baro_var = 0.0;
@@ -363,9 +360,6 @@ void main(void)
 
   /* Binary semaphore to shut down imu */
   xSemaphoreImuPwrIsDown = xSemaphoreCreateMutex();
-
-  /* Mutex for Ublox Tx */
-  xSemaphoreUbloxTransmitState = xSemaphoreCreateMutex();
 
   /* Pwr management DroneID on/off */
   xSemaphorePwrMan = xSemaphoreCreateMutex();
