@@ -180,7 +180,7 @@ bool clear_result_code(ublox_result_code_t * instance)
 }
 
 /***************************************************************************/
-/* NEW TEST Send command to gsm modem */
+/* Check if there is response from gsm modem */
 /***************************************************************************/
 bool check_response_timeout(uint16_t max_time, SemaphoreHandle_t *mutex, ublox_result_code_t *control)
 {
@@ -204,7 +204,7 @@ bool check_response_timeout(uint16_t max_time, SemaphoreHandle_t *mutex, ublox_r
 }
 
 /***************************************************************************/
-/* NEW TEST Send command to gsm modem */
+/* Send command to gsm modem */
 /***************************************************************************/
 bool send_and_receive_at(uint8_t *msg, uint16_t max_time, SemaphoreHandle_t *mutex, ublox_result_code_t *control)
 {
@@ -308,6 +308,55 @@ bool send_udp_msg(uint8_t *data_msg, uint8_t data_len)
       }
     }
   }
+  return success;
+}
+
+/***************************************************************************/
+/* sync baud and check connection to GSM modem */
+/***************************************************************************/
+bool sync_gsm_modem()
+{
+  bool success;
+  success =  build_and_send_msg(SYNC_RESP_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
+                                xSemaphoreUbloxStatusReg, 
+                                AT_COM_START, 
+                                AT_END_OF_MSG, 
+                                NULL);
+  return success;
+}
+
+/***************************************************************************/
+/* Reset GSM modem */
+/***************************************************************************/
+bool reset_gsm_modem()
+{
+  bool success;
+  HAL_GPIO_WritePin(GPIO_SARA_G340_RESET_O_GPIO_Port, GPIO_SARA_G340_RESET_O_Pin, SET);
+  vTaskDelay(RESET_TIME_MS / portTICK_RATE_MS);
+  HAL_GPIO_WritePin(GPIO_SARA_G340_RESET_O_GPIO_Port, GPIO_SARA_G340_RESET_O_Pin, RESET);
+  vTaskDelay(POWER_UP_TIME_MS / portTICK_RATE_MS);
+  
+  success = reset_modem_parameters();
+  if(success)
+    success = sync_gsm_modem();
+
+  return success;
+}
+
+/***************************************************************************/
+/* Power on GSM modem */
+/***************************************************************************/
+bool power_on_gsm_modem()
+{
+  bool success = false;
+  HAL_GPIO_WritePin(GPIO_SARA_G340_PWR_ON_O_GPIO_Port, GPIO_SARA_G340_PWR_ON_O_Pin, SET);
+  vTaskDelay(POWER_UP_TIME_MS / portTICK_RATE_MS);
+  HAL_GPIO_WritePin(GPIO_SARA_G340_PWR_ON_O_GPIO_Port, GPIO_SARA_G340_PWR_ON_O_Pin, RESET);
+
+  success = reset_modem_parameters();
+  if(success)
+    success = sync_gsm_modem();
   return success;
 }
 
@@ -470,21 +519,6 @@ bool disable_gsm_modem_echo(void)
 }
 
 /***************************************************************************/
-/* sync baud and check connection to GSM modem */
-/***************************************************************************/
-bool sync_gsm_modem()
-{
-  bool success;
-  success =  build_and_send_msg(SYNC_RESP_TIME_MS, 
-                                &ublox_status_reg.GP_RESULT_CODE,
-                                xSemaphoreUbloxStatusReg, 
-                                AT_COM_START, 
-                                AT_END_OF_MSG, 
-                                NULL);
-  return success;
-}
-
-/***************************************************************************/
 /* Power down GSM modem */
 /***************************************************************************/
 bool power_down_gsm_modem()
@@ -498,40 +532,6 @@ bool power_down_gsm_modem()
                                 AT_POWER_OFF_GSM, 
                                 AT_END_OF_MSG, 
                                 NULL);
-  return success;
-}
-
-/***************************************************************************/
-/* Reset GSM modem */
-/***************************************************************************/
-bool reset_gsm_modem()
-{
-  bool success;
-  HAL_GPIO_WritePin(GPIO_SARA_G340_RESET_O_GPIO_Port, GPIO_SARA_G340_RESET_O_Pin, SET);
-  vTaskDelay(RESET_TIME_MS / portTICK_RATE_MS);
-  HAL_GPIO_WritePin(GPIO_SARA_G340_RESET_O_GPIO_Port, GPIO_SARA_G340_RESET_O_Pin, RESET);
-  vTaskDelay(POWER_UP_TIME_MS / portTICK_RATE_MS);
-  
-  success = reset_modem_parameters();
-  if(success)
-    success = sync_gsm_modem();
-
-  return success;
-}
-
-/***************************************************************************/
-/* Power on GSM modem */
-/***************************************************************************/
-bool power_on_gsm_modem()
-{
-  bool success = false;
-  HAL_GPIO_WritePin(GPIO_SARA_G340_PWR_ON_O_GPIO_Port, GPIO_SARA_G340_PWR_ON_O_Pin, SET);
-  vTaskDelay(POWER_UP_TIME_MS / portTICK_RATE_MS);
-  HAL_GPIO_WritePin(GPIO_SARA_G340_PWR_ON_O_GPIO_Port, GPIO_SARA_G340_PWR_ON_O_Pin, RESET);
-
-  success = reset_modem_parameters();
-  if(success)
-    success = sync_gsm_modem();
   return success;
 }
 
@@ -740,28 +740,6 @@ bool set_disp_operator(void)
 }
 
 /***************************************************************************/
-/* Send start package to server */
-/***************************************************************************/
-bool send_udp_start_tracking_msg()
-{
-  bool success = false;
-  uint16_t msg_len = 0;
-  uint8_t data_msg[MAX_DATA_MSG_SIZE], array_buffer[3], socket_no[2];
-  if(build_start_msg(&msg_len, data_msg))
-  {
-    if(msg_len != 0)
-    {
-      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-      if(send_udp_msg(data_msg, msg_len))
-      {
-        success = true;
-      }
-    }
-  }
-  return success;
-}
-
-/***************************************************************************/
 /* Get latest gga msg */
 /***************************************************************************/
 bool get_gnss_gga(void)
@@ -802,6 +780,28 @@ bool get_gnss_gsv(void)
                                 AT_READ, 
                                 AT_END_OF_MSG, 
                                 NULL);
+  return success;
+}
+
+/***************************************************************************/
+/* Send start package to server */
+/***************************************************************************/
+bool send_udp_start_tracking_msg()
+{
+  bool success = false;
+  uint16_t msg_len = 0;
+  uint8_t data_msg[MAX_DATA_MSG_SIZE], array_buffer[3], socket_no[2];
+  if(build_start_msg(&msg_len, data_msg))
+  {
+    if(msg_len != 0)
+    {
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+      if(send_udp_msg(data_msg, msg_len))
+      {
+        success = true;
+      }
+    }
+  }
   return success;
 }
 

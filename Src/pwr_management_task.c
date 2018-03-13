@@ -193,7 +193,6 @@ void change_pwr_mode(droneid_pwr_state_t mode)
 bool power_mode_is_on(void)
 {
   bool pwr_mode_on = false;
-  // Pwr management DroneID on/off
   if( xSemaphoreTake( xSemaphorePwrMan, ( TickType_t ) DELAY_1000_MS ) == pdTRUE )
   {
     if(droneid_pwr_state == DRONEID_PWR_ON)

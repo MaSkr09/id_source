@@ -559,9 +559,6 @@ bool init_droneid(void)
 {
   bool success = false;
   uint8_t i;
-#ifdef DEBUG
-  debug_add_ascii_to_queue("DroneID ctrl task: Started\n");
-#endif
 
   reset_utm_var();
   reset_gsm_modem();
@@ -628,15 +625,10 @@ uint8_t get_stop_condition(void)
 }
 
 /***************************************************************************/
-/* Main function for controlling network related */
+/* Loop for connecting, transmitting and rebooting in case of errors */
 /***************************************************************************/
-void droneid_ctrl_main(void *pvParameters)
+void enter_droneid_crtl_loop(void)
 {
-  /* Wait until powered up */
-  while(!power_mode_is_on())
-  {
-    vTaskDelay(DELAY_100_MS / portTICK_RATE_MS);
-  }
   TASK_LOOP
   {
     pre_gga_msg.lat = 0.0;
@@ -672,4 +664,23 @@ void droneid_ctrl_main(void *pvParameters)
       error_reset_mcu(); // Reboot until sms is written
     }
   }
+}
+
+/***************************************************************************/
+/* Main function for controlling network related */
+/***************************************************************************/
+void droneid_ctrl_main(void *pvParameters)
+{
+  /* Wait until powered up */
+  while(!power_mode_is_on())
+  {
+    vTaskDelay(DELAY_100_MS / portTICK_RATE_MS);
+  }
+
+#ifdef DEBUG
+  debug_add_ascii_to_queue("DroneID ctrl task: Started\n");
+#endif
+  
+  enter_droneid_crtl_loop();
+  vTaskSuspend( NULL );
 }
