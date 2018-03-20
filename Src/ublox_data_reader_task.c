@@ -383,10 +383,10 @@ void get_type(uint8_t *str)
   {
     get_and_check_response(str, TIME_500_MS, &ublox_status_reg.CPIN_RESULT_CODE, xSemaphoreUbloxStatusReg);
   }
-  else if((strncmp(str, AT_DISABLE_ECHO, sizeof(AT_DISABLE_ECHO)-1)==0)||(strncmp(str, DISABLE_ECHO, sizeof(DISABLE_ECHO))==0))
-  {
-    get_and_check_response(str, TIME_500_MS, &ublox_status_reg.DIS_ECHO_RESULT_CODE, xSemaphoreUbloxStatusReg);
-  }
+//  else if((strncmp(str, AT_DISABLE_ECHO, sizeof(AT_DISABLE_ECHO)-1)==0)||(strncmp(str, DISABLE_ECHO, sizeof(DISABLE_ECHO))==0))
+//  {
+//    get_and_check_response(str, TIME_500_MS, &ublox_status_reg.DIS_ECHO_RESULT_CODE, xSemaphoreUbloxStatusReg);
+//  }
   else if(strncmp(str, CGATT_SUCCES, sizeof(CGATT_SUCCES)-1)==0)
   {
     get_and_check_response(str, TIME_500_MS, &ublox_status_reg.CGATT_RESULT_CODE, xSemaphoreUbloxStatusReg);

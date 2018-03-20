@@ -39,7 +39,7 @@
 /* Global defines */
 /***************************************************************************/
 /* DroneID ID number */
-#define DRONE_ID_NUMBER              (uint32_t)500
+#define DRONE_ID_NUMBER              (uint32_t)501
 
 /* droneid server settings */
 #define GMS_MSG_PERIOD_S              15

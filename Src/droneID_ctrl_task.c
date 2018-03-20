@@ -87,7 +87,6 @@ transmit_error_counter_t transmit_error_counters;
 bool gprs_mode_flag = false;
 uint8_t msg_mode = NO_SERVER_CONNECTION;
 bool gnss_pwr_on_flag = false;
-uint8_t error_code = ERROR_CODE_USER_SHUT_DOWN;
 
 gpgga_t pre_gga_msg;
 
@@ -177,6 +176,40 @@ bool add_error_count(uint8_t *inst)
 }
 
 /***************************************************************************/
+/* Get transmit error */
+/***************************************************************************/
+uint8_t get_error_code()
+{
+  uint8_t return_code = ERROR_CODE_ID_TRACK_POS;
+
+  if(transmit_error_counters.error_counter_send_track < MAX_SEND_ERROR)
+  {
+    return_code = ERROR_CODE_ID_TRACK_POS;
+  }
+  else if(transmit_error_counters.error_cnt_read_gga < MAX_READ_GGA)
+  {
+    return_code = ERROR_CODE_GET_GGA;
+  }
+  else if(transmit_error_counters.error_cnt_read_gsv < MAX_READ_GSV)
+  {
+    return_code = ERROR_CODE_GET_GSV;
+  }
+  else if(transmit_error_counters.error_cnt_send_loc < MAX_SEND_GSM_LOC)
+  {
+    return_code = ERROR_CODE_SEND_GSM_LOC;
+  }
+  else if(transmit_error_counters.error_cnt_read_loc < MAX_READ_GSM_LOC)
+  {
+    return_code = ERROR_CODE_GET_GSM_LOC;
+  }
+  else if(transmit_error_counters.error_cnt_get_rssi < MAX_READ_RSSI)
+  {
+    return_code = ERROR_CODE_GSM_RSSI;
+  }
+  return return_code;
+}
+
+/***************************************************************************/
 /* Reset var */
 /***************************************************************************/
 bool reset_paramters(void)
@@ -227,7 +260,6 @@ bool reset_paramters(void)
 
   set_indication_start_mode(true);
   
-  error_code = ERROR_CODE_USER_SHUT_DOWN;
   return success;
 }
 
@@ -269,7 +301,10 @@ void change_timer_period(uint32_t timer_period)
 void error_reset_mcu(void)
 {
   if(power_mode_is_on())
+  {
+    reset_gsm_modem();
     NVIC_SystemReset();
+  }
 }
 
 /***************************************************************************/
@@ -531,7 +566,9 @@ uint8_t get_stop_condition(void)
     stop_code = ERROR_CODE_LOW_BATT_V;
   }
   else
-    stop_code = error_code;
+  {
+    stop_code = get_error_code();
+  }
 
   return stop_code;
 }
@@ -546,19 +583,15 @@ bool enable_get_gsm_pos(void)
   while(!set_netw_reg_loc_urc())
     vTaskDelay(20);
 
-// FIX FOR TESTING SETUP WITHOUT COUNTER IN SEND
-//  if(set_netw_reg_loc_urc())
-//  {
+  vTaskDelay(20);
+  if(set_disp_operator())
+  {
     vTaskDelay(20);
-    if(set_disp_operator())
+    if(read_netw_reg_loc())
     {
-      vTaskDelay(20);
-      if(read_netw_reg_loc())
-      {
-        success = true;
-      }
+      success = true;
     }
-//  }
+  }
   return success;
 }
 
@@ -720,12 +753,12 @@ bool init_droneid(void)
       {
         if(setup_socket())
         {
-          if(setup_and_start_gnss())
+          if(open_id_socket_server())
           {
-            gnss_pwr_on_flag = true;
-            if(open_id_socket_server())
+            msg_mode = SOCKET_SERVER_CONNECTION;            
+            if(setup_and_start_gnss())
             {
-              msg_mode = SOCKET_SERVER_CONNECTION;            
+              gnss_pwr_on_flag = true;
               if(enable_get_gsm_pos())
               {
                 success = true;
@@ -850,6 +883,21 @@ void get_gsv(void)
 }
 
 /***************************************************************************/
+/* Send stop msg and power down id */
+/***************************************************************************/
+bool stop_droneid(void)
+{
+  bool success = false;
+  send_udp_stop_msg(get_stop_condition());
+  power_down_gnss_gsm();
+  if(!(get_stop_condition()>>7))
+  {
+    success = true;
+  }
+  return success;
+}
+
+/***************************************************************************/
 /* Enter tracking mode */
 /***************************************************************************/
 bool tracking_mode(void)
@@ -857,6 +905,8 @@ bool tracking_mode(void)
   bool success = false;
   if(start_response_from_server())
   {
+    success = true;
+
     while(power_mode_is_on() && error_count_accepted())
     {
       read_udp_server_msg();
@@ -882,50 +932,29 @@ bool tracking_mode(void)
       }
     }
   }
-
-  if(error_count_accepted())
-    success = true;
-
   return success;
 }
 
 /***************************************************************************/
 /* Loop for connecting, transmitting and rebooting in case of errors */
 /***************************************************************************/
-bool enter_droneid_crtl_loop_(void)
+bool enter_droneid_crtl_loop(void)
 {
+  bool success = false;
   if(send_udp_start_tracking_msg())
   {
-    while(power_mode_is_on())
+    if(tracking_mode())
     {
-      if(!tracking_mode())
+      if(power_mode_is_on())
       {
-        if(power_mode_is_on())
-        {
-          // Error has occurred that requires rebooting. Try sending stop msg first
-          set_indication_start_mode(false);
-          send_udp_stop_msg(get_stop_condition());
-          error_reset_mcu();
-        }
+        success = true;
       }
     }
+  }
 
-    if(send_udp_stop_msg(get_stop_condition()))
-    {
-      power_down_gnss_gsm();
-      if(!(get_stop_condition()>>7))
-      {
-        xSemaphoreGive(xSemaphoreGsmPwrIsDown);
-        vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-        vTaskSuspend( NULL );
-      }
-    }
-  }
-  else
-  {
-    error_reset_mcu(); // Reboot or implement sms 
-  }
+  return success;
 }
+
 /***************************************************************************/
 /* Loop for connecting, transmitting and rebooting in case of errors */
 /***************************************************************************/
@@ -939,18 +968,30 @@ void enter_droneid_loop(void)
       {
         if(init_droneid())
         {
-          if(enter_droneid_crtl_loop_())
+          if(enter_droneid_crtl_loop())
           {
-
           }
         }
       }
-    }
+      if(power_mode_is_on())
+      {
+        // Error has occurred that requires rebooting. Try sending stop msg first
+        set_indication_start_mode(false);
+        send_udp_stop_msg(get_stop_condition());
+        error_reset_mcu();
+      }
+      else
+      {
+        stop_droneid();
+        set_indication_start_mode(false);
+        xSemaphoreGive(xSemaphoreGsmPwrIsDown);
+        vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+        vTaskSuspend( NULL );
+      }
 
-    if(power_mode_is_on())
-      error_reset_mcu(); // Reboot
+    }
   }
-  //reset_gsm_modem() USE IF FAILS
+  error_reset_mcu();
 }
 
 /***************************************************************************/

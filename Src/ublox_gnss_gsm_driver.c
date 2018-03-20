@@ -61,7 +61,7 @@
 #define PWR_DOWN_RESP_TIME_MS         20000
 #define POWER_UP_TIME_MS              3000
 #define SYNC_RESP_TIME_MS             200
-#define DIS_ECHO_RESP_TIME_MS         1000
+#define DIS_ECHO_RESP_TIME_MS         2000
 #define PIN_CHECK_RESP_TIME_MS        10000
 #define GPRS_ATTACH_RESP_TIME_MS      1000
 #define PSD_RESP_TIME_MS              5000
