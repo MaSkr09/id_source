@@ -121,45 +121,6 @@ bool reset_modem_parameters()
     ublox_status_reg.UDP_NO_OF_BYTES_TO_READ = 0;
     ublox_status_reg.UDP_READING_NO_OF_BYTES = 0;
     xSemaphoreGive(xSemaphoreUbloxStatusReg);
-
-  if(xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_500_MS ) == pdTRUE)
-  {
-    gsm_signal_and_signal.SIGNAL_Q_VAR = 99;
-    gsm_signal_and_signal.received_resp_cell_id = false;
-    gsm_signal_and_signal.mob_country_code = 0;
-    gsm_signal_and_signal.mob_network_code = 0;
-    gsm_signal_and_signal.mob_location_area_code = 0;
-    gsm_signal_and_signal.mob_cell_id_code = 0;
-    gsm_signal_and_signal.pre_mob_location_area_code = 0;
-    gsm_signal_and_signal.pre_mob_cell_id_code = 0;
-    xSemaphoreGive(xSemaphoreCellId);
-  }
-
-    if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
-    {
-      for(i=0; i<4; i++)
-      {
-        for(j=0; j<4; j++)
-        {
-          gpgsv_data[i].sat[j].prn = -1;
-          glgsv_data[i].sat[j].prn = -1;
-        }
-      }
-      xSemaphoreGive( xSemaphoreGsvMsg );
-
-      if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
-      {
-        gga_data.sat = 0;
-        gga_data.time = 0;
-        gga_data.hdop = 0;
-        gga_data.lat = 0;
-        gga_data.lon = 0;
-        gga_data.alt = 0;
-        xSemaphoreGive( xSemaphoreGgaMsg );
-
-        success = true;
-      }
-    }
   }
   return success;
 }
@@ -331,15 +292,11 @@ bool sync_gsm_modem()
 /***************************************************************************/
 bool reset_gsm_modem()
 {
-  bool success;
+  bool success = false;
   HAL_GPIO_WritePin(GPIO_SARA_G340_RESET_O_GPIO_Port, GPIO_SARA_G340_RESET_O_Pin, SET);
   vTaskDelay(RESET_TIME_MS / portTICK_RATE_MS);
   HAL_GPIO_WritePin(GPIO_SARA_G340_RESET_O_GPIO_Port, GPIO_SARA_G340_RESET_O_Pin, RESET);
   vTaskDelay(POWER_UP_TIME_MS / portTICK_RATE_MS);
-  
-  success = reset_modem_parameters();
-  if(success)
-    success = sync_gsm_modem();
 
   return success;
 }
@@ -349,14 +306,11 @@ bool reset_gsm_modem()
 /***************************************************************************/
 bool power_on_gsm_modem()
 {
-  bool success = false;
+  bool success = true;
   HAL_GPIO_WritePin(GPIO_SARA_G340_PWR_ON_O_GPIO_Port, GPIO_SARA_G340_PWR_ON_O_Pin, SET);
   vTaskDelay(POWER_UP_TIME_MS / portTICK_RATE_MS);
   HAL_GPIO_WritePin(GPIO_SARA_G340_PWR_ON_O_GPIO_Port, GPIO_SARA_G340_PWR_ON_O_Pin, RESET);
 
-  success = reset_modem_parameters();
-  if(success)
-    success = sync_gsm_modem();
   return success;
 }
 
@@ -473,15 +427,18 @@ bool PSD_PROF_CONF(void)
 bool check_gprs_attached(void)
 {
   bool success;
-  success =  build_and_send_msg(GPRS_ATTACH_RESP_TIME_MS, 
-                                &ublox_status_reg.CGATT_RESULT_CODE,
+  if( build_and_send_msg(GPRS_ATTACH_RESP_TIME_MS, 
+                                &ublox_status_reg.GP_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
                                 AT_COM_START, 
                                 AT_PLUS, 
                                 GPRS_ATTACHED, 
                                 AT_READ, 
                                 AT_END_OF_MSG, 
-                                NULL);
+                                NULL))
+  {
+    success =  check_response_timeout(TIME_20_MS, xSemaphoreUbloxStatusReg, &ublox_status_reg.CGATT_RESULT_CODE);
+  }
   return success;
 }
 
@@ -510,7 +467,8 @@ bool disable_gsm_modem_echo(void)
 {
   bool success;
   success =  build_and_send_msg(DIS_ECHO_RESP_TIME_MS, 
-                                &ublox_status_reg.DIS_ECHO_RESULT_CODE,
+                                &ublox_status_reg.GP_RESULT_CODE,
+//                                &ublox_status_reg.DIS_ECHO_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
                                 AT_DISABLE_ECHO, 
                                 AT_END_OF_MSG, 
@@ -763,14 +721,6 @@ bool get_gnss_gga(void)
 bool get_gnss_gsv(void)
 {
   bool success = false;
-
-  // TODO move to app code
-  if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
-  {
-    clear_gsv_msg(gpgsv_data);
-    xSemaphoreGive( xSemaphoreGsvMsg );
-  }
-
   success =  build_and_send_msg(UPDATE_GNSS_DATA_TIME_MS, 
                                 &ublox_status_reg.GP_RESULT_CODE,
                                 xSemaphoreUbloxStatusReg, 
@@ -780,28 +730,6 @@ bool get_gnss_gsv(void)
                                 AT_READ, 
                                 AT_END_OF_MSG, 
                                 NULL);
-  return success;
-}
-
-/***************************************************************************/
-/* Send start package to server */
-/***************************************************************************/
-bool send_udp_start_tracking_msg()
-{
-  bool success = false;
-  uint16_t msg_len = 0;
-  uint8_t data_msg[MAX_DATA_MSG_SIZE], array_buffer[3], socket_no[2];
-  if(build_start_msg(&msg_len, data_msg))
-  {
-    if(msg_len != 0)
-    {
-      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-      if(send_udp_msg(data_msg, msg_len))
-      {
-        success = true;
-      }
-    }
-  }
   return success;
 }
 
@@ -960,102 +888,7 @@ bool send_gsm_nw_msg()
   return success;
 }
 
-/***************************************************************************/
-/* Init gsm modem */
-/***************************************************************************/
-bool init_gsm_modem(void)
-{
-  bool success = false;
-  if(power_on_gsm_modem())
-  {
-    vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-    if(disable_gsm_modem_echo())
-    {
-      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-      if(pin_code_check())
-      {
-        success = true;
-      }
-    }
-  }
-  if(!success)
-  {
-    vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-    if(reset_gsm_modem())
-    {
-      success = false;
-    }
-  }
-  return success;
-}
 
-/***************************************************************************/
-/* Setup and start GNSS with aiding server etc. */
-/***************************************************************************/
-bool setup_and_start_gnss(void)
-{
-  bool success = false;
-  vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-  if(setup_profile())
-  {
-    vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-    if(setup_aiding_server())
-    {
-      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-      if(setup_store_gga())
-      {
-        vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-        if(setup_store_gsv())
-        {
-          vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-          if(setup_unsolicited_indication())
-          {
-            vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-            if(power_on_gnss())
-            {
-              success = true;
-            }
-          }
-        }
-      }
-    }
-  }
-  return success;
-}
 
-/***************************************************************************/
-/* Connect to server via socket */
-/***************************************************************************/
-bool connect_socket(void)
-{
-  bool success = false;
-  vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-
-  while(!check_gprs_attached())
-  {
-      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-  }
-  if(PSD_PROF_CONF())
-  {
-    vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-    if(psd_conf_ip())
-    {
-      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-      if(psd_pdp_activate())
-      {
-        vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-        if(open_socket())
-        {
-          vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
-          if(get_server_ip())
-          {
-            success = true;
-          }
-        }
-      }
-    }
-  }
-  return success;
-}
 
 

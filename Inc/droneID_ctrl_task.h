@@ -42,6 +42,18 @@
 /***************************************************************************/
 /* Global types and functions */
 /***************************************************************************/
+/***************************************************************************/
+typedef struct
+{
+  uint8_t error_cnt_read_loc;
+  uint8_t error_cnt_send_loc;
+  uint8_t error_cnt_read_gsv;
+  uint8_t error_cnt_read_gga;
+  uint8_t error_counter_send_track; 
+  uint8_t error_cnt_get_rssi;
+  uint8_t msg_count_cell_id;
+  uint8_t cell_info_msg_count;
+} transmit_error_counter_t;
 
 /***************************************************************************/
 /* Global functions */

@@ -42,17 +42,17 @@
 #include "uart_transmit.h"
 #include "droneID_ctrl_task.h"
 #include "id_config.h"
+#include "global_defines.h"
+#include "id_protocol_v1.h"
+
 /***************************************************************************/
 /* Defines */
 /***************************************************************************/
+transmit_error_counter_t transmit_error_counters;
 #define SOCKET_CREATE_MAX_ATTEMPT   3
-#define DELAY_5_MS                  5
-#define DELAY_20_MS                 20
-#define DELAY_30_MS                 30
-#define DELAY_50_MS                 50
-#define DELAY_100_MS                100
-#define DELAY_500_MS                500
-#define DELAY_1000_MS               1000
+
+#define GPRS_CON_SLEEP_MS           50
+#define MAX_GPRS_ITERATION          600
 
 #define UDP_TRAKING_LOOP_DELAY_MS   20
 #define MAX_TRACKING_UDP_ERRORS     3
@@ -78,13 +78,16 @@
 #define TIME_5000_MS                5000
 #define RESPONSE_LOOP_TIME          100
 
+#define MAX_SYNC_ITERATION      50
+#define SYNC_SLEEP_MS           50
+#define MAX_DATA_MSG_SIZE         256
 /***************************************************************************/
 /* Shared variables */
 /***************************************************************************/
 bool gprs_mode_flag = false;
 uint8_t msg_mode = NO_SERVER_CONNECTION;
 bool gnss_pwr_on_flag = false;
-uint8_t error_code;
+uint8_t error_code = ERROR_CODE_USER_SHUT_DOWN;
 
 gpgga_t pre_gga_msg;
 
@@ -95,7 +98,7 @@ gpgga_t pre_gga_msg;
 void set_indication_start_mode(bool start_mode)
 {
 
-  if(xSemaphoreTake( xSemaphoreTaskIndicators, ( TickType_t ) DELAY_500_MS) == pdTRUE)
+  if(xSemaphoreTake( xSemaphoreTaskIndicators, ( TickType_t ) TIME_500_MS) == pdTRUE)
   {
     if(start_mode)
       ctrl_power_on = true;
@@ -106,12 +109,80 @@ void set_indication_start_mode(bool start_mode)
 }
 
 /***************************************************************************/
-/* Reset var */
+/* Reset gsv data */
 /***************************************************************************/
-bool reset_utm_var()
+bool reset_gsv_data(gpgsv_t * gsv)
+{
+  bool return_value = false;
+  if( xSemaphoreTake( xSemaphoreGsvMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
+  {
+    return_value = !clear_gsv_msg(gsv);
+    xSemaphoreGive( xSemaphoreGsvMsg );
+  }
+  return return_value;
+}
+
+/***************************************************************************/
+/* Reset gga data */
+/***************************************************************************/
+bool reset_gga_data(gpgga_t * gga)
+{
+  bool return_value = false;
+  if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
+  {
+    return_value = !clear_gga_msg(gga);
+    xSemaphoreGive( xSemaphoreGgaMsg );
+  }
+  return return_value;
+}
+
+/***************************************************************************/
+/* Check for transmit error */
+/***************************************************************************/
+bool error_count_accepted(void)
+{
+    bool success = false;
+    if((transmit_error_counters.error_counter_send_track < MAX_SEND_ERROR) 
+    && (transmit_error_counters.error_cnt_read_gga < MAX_READ_GGA)
+    && (transmit_error_counters.error_cnt_read_gsv < MAX_READ_GSV)  
+    && (transmit_error_counters.error_cnt_send_loc < MAX_SEND_GSM_LOC)  
+    && (transmit_error_counters.error_cnt_read_loc < MAX_READ_GSM_LOC)
+    && (transmit_error_counters.error_cnt_get_rssi < MAX_READ_RSSI))
+    {
+      success = true;
+    }
+  return success;
+}
+
+/***************************************************************************/
+/* Check for transmit error */
+/***************************************************************************/
+bool set_error_count(uint8_t *inst, uint8_t count_no)
 {
   bool success = false;
-  if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_50_MS ) == pdTRUE )
+  *inst = count_no;
+  success = true;
+  return success;
+}
+
+/***************************************************************************/
+/* Error counter add  */
+/***************************************************************************/
+bool add_error_count(uint8_t *inst)
+{
+  bool success = false;
+  *inst = (*inst) +1;
+  success = true;
+  return success;
+}
+
+/***************************************************************************/
+/* Reset var */
+/***************************************************************************/
+bool reset_paramters(void)
+{
+  bool success = false;
+  if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_50_MS ) == pdTRUE )
   {
     server_msg_count_id = 0;
     server_msg_time_interval = 1;
@@ -122,8 +193,9 @@ bool reset_utm_var()
     serv_cmd = 0;
     xSemaphoreGive(xSemaphoreServerFlightMsgs);
 
-    if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) DELAY_50_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_50_MS ) == pdTRUE )
     {
+      gsm_signal_and_signal.SIGNAL_Q_VAR = 99;
       gsm_signal_and_signal.received_resp_cell_id = false;
       echo_msg_count_cell_id = 0;
       send_msg_count_cell_id = 5;
@@ -135,6 +207,21 @@ bool reset_utm_var()
       gsm_signal_and_signal.pre_mob_cell_id_code = 0;
       xSemaphoreGive(xSemaphoreCellId);
       success = true;
+
+        reset_gsv_data(gpgsv_data);
+        reset_gsv_data(glgsv_data);
+        
+        reset_gga_data(&pre_gga_msg);
+        reset_gga_data(&gga_data);
+
+        set_error_count(&transmit_error_counters.cell_info_msg_count, 0);
+        set_error_count(&transmit_error_counters.error_cnt_get_rssi, 0);
+        set_error_count(&transmit_error_counters.error_cnt_read_gga, 0);
+        set_error_count(&transmit_error_counters.error_cnt_read_gsv, 0);
+        set_error_count(&transmit_error_counters.error_cnt_read_loc, 0);
+        set_error_count(&transmit_error_counters.error_cnt_send_loc, 0);
+        set_error_count(&transmit_error_counters.error_counter_send_track, 0);
+        set_error_count(&transmit_error_counters.msg_count_cell_id, 0);
     }
   }
 
@@ -159,7 +246,7 @@ bool power_down_gnss_gsm(void)
   else
       success = true;
 
-  vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+  vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
   success &= power_down_gsm_modem();
 
   return success;
@@ -213,7 +300,7 @@ bool update_rssi_values(void)
 {
   bool success = false;
 
-  vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+  vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
   if(update_rssi())
   {
     success = true;
@@ -228,7 +315,7 @@ bool update_gga_data(void)
 {
   bool success = false;
 
-  vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+  vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
   if(get_gnss_gga())
   {
     success = true;
@@ -245,19 +332,19 @@ bool read_udp_server_msg(void)
   uint16_t bytes = 1;
   uint8_t i=0;
 
-    if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) DELAY_5_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreUbloxStatusReg, ( TickType_t ) TIME_5_MS ) == pdTRUE )
     {
       bytes = ublox_status_reg.UDP_NO_OF_BYTES_TO_READ;
       xSemaphoreGive(xSemaphoreUbloxStatusReg);
     }
     if(bytes != 0)
     {
-      vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
       if(read_udp_no_of_msg_bytes())
         success = true;
     }
     // check counter value and update parameter if missing response from server
-    else if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_5_MS ) == pdTRUE )
+    else if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_5_MS ) == pdTRUE )
     {
       server_msg_count_id &= 0x0F;
       if(((server_msg_count_id >= echo_msg_count_cell_id) && ((server_msg_count_id - echo_msg_count_cell_id) > MSG_COUNT_DIF_WARN))
@@ -283,10 +370,10 @@ bool gsm_info_update(void)
 {
   bool success = false;
 
-  vTaskDelay(DELAY_20_MS);
+  vTaskDelay(TIME_20_MS);
   if(send_gsm_nw_msg())
   {
-    if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) DELAY_5_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_5_MS ) == pdTRUE )
     {
       gsm_signal_and_signal.pre_mob_cell_id_code = gsm_signal_and_signal.mob_cell_id_code;
       gsm_signal_and_signal.pre_mob_location_area_code = gsm_signal_and_signal.mob_location_area_code;
@@ -303,7 +390,10 @@ bool gsm_info_update(void)
 bool get_and_send_gsv(void)
 {
   bool success = false;
-  vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
+  vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+  reset_gsv_data(gpgsv_data);
+  reset_gsv_data(glgsv_data);
+
   if(get_gnss_gsv())
   {
     if(send_udp_gpgsv())
@@ -324,7 +414,7 @@ bool gnss_fix(void)
 {
   bool fix = false;
 
-  if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+  if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
     if(gga_data.sat > GNSS_MIN_SAT)
     {
@@ -342,26 +432,26 @@ void update_tracking_timer_value(void)
 {
   if(gnss_fix())
   {
-    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_20_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_20_MS ) == pdTRUE )
     {
       if(new_server_msg_time_interval != server_msg_time_interval)
       {
         server_msg_time_interval = new_server_msg_time_interval;
-        xTimerChangePeriod(xHandleTransmitTimer, (1000*server_msg_time_interval), DELAY_20_MS);
-        xTimerReset( xHandleTransmitTimer, DELAY_20_MS);
+        xTimerChangePeriod(xHandleTransmitTimer, (1000*server_msg_time_interval), TIME_20_MS);
+        xTimerReset( xHandleTransmitTimer, TIME_20_MS);
       }
       xSemaphoreGive(xSemaphoreServerFlightMsgs);
     }
   }
   else
   {
-    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_20_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_20_MS ) == pdTRUE )
     {
       if(GMS_MSG_PERIOD_S != server_msg_time_interval)
       {
         server_msg_time_interval = GMS_MSG_PERIOD_S;
-        xTimerChangePeriod(xHandleTransmitTimer, (1000*server_msg_time_interval), DELAY_20_MS);
-        xTimerReset( xHandleTransmitTimer, DELAY_20_MS);
+        xTimerChangePeriod(xHandleTransmitTimer, (1000*server_msg_time_interval), TIME_20_MS);
+        xTimerReset( xHandleTransmitTimer, TIME_20_MS);
       }
       xSemaphoreGive( xSemaphoreServerFlightMsgs );
     }
@@ -371,9 +461,9 @@ void update_tracking_timer_value(void)
 bool droneID_has_moved(void)
 {
   bool return_value = false;
-  if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+  if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
-    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
     {
       if( (max_horizontal_server_msg <= degree_to_meter_conv(&gga_data, &pre_gga_msg)) || (max_vertical_server_msg <= abs(pre_gga_msg.alt - gga_data.alt)))
       {
@@ -391,7 +481,7 @@ bool droneID_has_moved(void)
 /***************************************************************************/
 void update_pre_pos()
 {
-  if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+  if( xSemaphoreTake( xSemaphoreGgaMsg, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
     pre_gga_msg.alt = gga_data.alt; 
     pre_gga_msg.lat = gga_data.lat; 
@@ -412,7 +502,7 @@ bool start_response_from_server()
   while((!(response_ok)) && (timeout > 0))
   {
     read_udp_server_msg();
-    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+    if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
     {
       if(echo_start_msg_count == (server_msg_count_id-1))
         response_ok = true;
@@ -425,105 +515,25 @@ bool start_response_from_server()
 }
 
 /***************************************************************************/
-/* Enter tracking mode */
+/* Get stop condition */
 /***************************************************************************/
-void udp_tracking_mode(void)
+uint8_t get_stop_condition(void)
 {
-  uint8_t i = 0, error_cnt_read_loc = 0, error_cnt_send_loc = 0, 
-          error_cnt_read_gsv = 0, error_cnt_read_gga = 0, 
-          error_counter_send_track = 0, error_cnt_get_rssi = 0,
-          msg_count_cell_id, cell_info_msg_count;
+  droneid_pwr_state_t mode = get_power_mode();
+  uint8_t stop_code;
 
-  if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
+  if( mode == DRONEID_PWR_OFF)
   {
-    msg_count_cell_id = server_msg_count_id;
-    cell_info_msg_count = server_msg_count_id;
-    xSemaphoreGive( xSemaphoreServerFlightMsgs );
+    stop_code = ERROR_CODE_USER_SHUT_DOWN;
   }
-
-  if(start_response_from_server())
+  else if( mode == DRONEID_PWR_OFF_LOW_BATT)
   {
-    while(power_mode_is_on() 
-          && (error_counter_send_track < MAX_SEND_ERROR) 
-          && (error_cnt_read_gga < MAX_READ_GGA)
-          && (error_cnt_read_gsv < MAX_READ_GSV)  
-          && (error_cnt_send_loc < MAX_SEND_GSM_LOC)  
-          && (error_cnt_read_loc < MAX_READ_GSM_LOC)
-          && (error_cnt_get_rssi < MAX_READ_RSSI))
-    {
-      read_udp_server_msg();
-
-      if(xSemaphoreTake( xSemaphoreGSMInfoTimerExpired, ( TickType_t ) 0) == pdTRUE)
-      {
-        error_cnt_read_loc++;
-        if(read_netw_reg_loc())
-        {
-          error_cnt_read_loc = 0;
-          error_cnt_send_loc++;
-          if(gsm_info_update())
-          {
-            error_cnt_send_loc = 0;
-          }
-        }
-      }
-
-      if(xSemaphoreTake( xSemaphoreGetGgga, ( TickType_t ) 0) == pdTRUE)
-      {
-        error_cnt_read_gga++;
-        if(update_gga_data())
-        {
-          error_cnt_read_gga = 0;
-          if(gnss_fix())
-          {
-            if(droneID_has_moved())
-            {
-              xSemaphoreGive( xSemaphoreTransmitPos );
-              xTimerReset( xHandleTransmitTimer, DELAY_20_MS);
-              update_pre_pos();
-            }
-          }
-        }
-      }
-
-      if(xSemaphoreTake( xSemaphoreTransmitPos, ( TickType_t ) UDP_TRAKING_LOOP_DELAY_MS) == pdTRUE)
-      {
-        error_cnt_get_rssi++;
-        if(update_rssi_values())
-        {
-          error_cnt_get_rssi = 0;
-          update_tracking_timer_value();
-          error_counter_send_track++;
-          if(send_udp_tracking_msg())
-          {
-            error_counter_send_track = 0;
-          }
-        }
-      }
-
-      if((xSemaphoreTake( xSemaphoreGsvTimerExpired, ( TickType_t ) 0) == pdTRUE) && (serv_cmd<<7))
-      {
-        error_cnt_read_gsv++;
-        if(get_and_send_gsv())
-        {
-          error_cnt_read_gsv = 0;
-        }
-      }
-    }
-    if(!(error_counter_send_track < MAX_SEND_ERROR))
-      error_code = ERROR_CODE_ID_TRACK_POS;
-    else if(!(error_cnt_read_gga < MAX_READ_GGA))
-      error_code = ERROR_CODE_GET_GGA;
-    else if(!(error_cnt_read_gsv < MAX_READ_GSV))
-      error_code = ERROR_CODE_GET_GSV;  
-    else if(!(error_cnt_send_loc < MAX_SEND_GSM_LOC))
-      error_code = ERROR_CODE_SEND_GSM_LOC;  
-    else if(!(error_cnt_read_loc < MAX_READ_GSM_LOC))
-      error_code = ERROR_CODE_GET_GSM_LOC;
-    else if(!(error_cnt_get_rssi < MAX_READ_RSSI))
-      error_code = ERROR_CODE_GSM_RSSI;
+    stop_code = ERROR_CODE_LOW_BATT_V;
   }
   else
-    error_code = ERROR_CODE_MISSING_RESP;
+    stop_code = error_code;
+
+  return stop_code;
 }
 
 /***************************************************************************/
@@ -553,47 +563,139 @@ bool enable_get_gsm_pos(void)
 }
 
 /***************************************************************************/
-/* Main function for controlling network related */
+/* Init gsm modem */
 /***************************************************************************/
-bool init_droneid(void)
+bool init_gsm_modem(void)
+{
+  bool success = false, gsm_modem_con = false;
+  uint16_t counter = 0;
+
+  while((counter++ < MAX_SYNC_ITERATION) && (power_mode_is_on()) && !gsm_modem_con )
+  {
+    gsm_modem_con = sync_gsm_modem();
+    if(!gsm_modem_con)
+    {
+      vTaskDelay(SYNC_SLEEP_MS);
+    }
+  }
+  if(gsm_modem_con)
+  {
+    vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+    if(disable_gsm_modem_echo())
+    {
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+      if(pin_code_check())
+      {
+        success = true;
+      }
+    }
+  }
+  return success;
+}
+
+/***************************************************************************/
+/* Connect GPRS */
+/***************************************************************************/
+bool connect_gprs(void)
+{
+  bool gprs_con = false;
+  uint16_t counter = 0;
+
+  while((counter++ < MAX_GPRS_ITERATION) && (power_mode_is_on()) && !gprs_con )
+  {
+    gprs_con = check_gprs_attached();
+    if(!gprs_con)
+    {
+      vTaskDelay(GPRS_CON_SLEEP_MS);
+    }
+  }
+  return gprs_con;
+}
+
+/***************************************************************************/
+/* Start transmit timers */
+/***************************************************************************/
+bool start_timers(void)
+{
+  bool success = false;
+  if( (xTimerStart( xHandleTransmitTimer, TIME_1000_MS ) == pdPASS) &&  (xTimerStart( xHandleGsvGPTimer, TIME_1000_MS ) == pdPASS)
+         &&  (xTimerStart( xHandleGSMInfoTimer, TIME_1000_MS ) == pdPASS) &&  (xTimerStart( xHandleGetGgaTimer, TIME_1000_MS ) == pdPASS))
+  {
+    success = true;
+  }
+  return success;
+}
+
+/***************************************************************************/
+/* Setup socket */
+/***************************************************************************/
+bool setup_socket(void)
 {
   bool success = false;
   uint8_t i;
 
-  reset_utm_var();
-  reset_gsm_modem();
-
-  if(init_gsm_modem())
+  vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+  for(i = 0; (power_mode_is_on() && (success == false) && (i < MAX_GPRS_CONNECT)); i++)
   {
-    msg_mode = SMS_SERVER_CONNECTION;
-    // Start timers
-    if( (xTimerStart( xHandleTransmitTimer, DELAY_1000_MS ) == pdPASS) &&  (xTimerStart( xHandleGsvGPTimer, DELAY_1000_MS ) == pdPASS)
-         &&  (xTimerStart( xHandleGSMInfoTimer, DELAY_1000_MS ) == pdPASS) &&  (xTimerStart( xHandleGetGgaTimer, DELAY_1000_MS ) == pdPASS))
+    if(PSD_PROF_CONF())
     {
-      for(i = 0; (power_mode_is_on() && (msg_mode != SOCKET_SERVER_CONNECTION) && (i < MAX_GPRS_CONNECT)); i++)
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+      if(psd_conf_ip())
       {
-        if(power_mode_is_on())
+        vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+        if(psd_pdp_activate())
         {
-          if(connect_socket())
-          {
-            msg_mode = SOCKET_SERVER_CONNECTION;
-          }
-          else
-          {
-            reset_gsm_modem();
-            init_gsm_modem();
-          }
+          success = true;
         }
       }
+    }
+  }
+  return success;
+}
 
-      if(enable_get_gsm_pos())
+/***************************************************************************/
+/* Open socket to server */
+/***************************************************************************/
+bool open_id_socket_server(void)
+{
+  bool success = false;
+  vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+  if(open_socket())
+  {
+    vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+    if(get_server_ip())
+    {
+      success = true;
+    }
+  }
+}
+
+/***************************************************************************/
+/* Setup and start GNSS with aiding server etc. */
+/***************************************************************************/
+bool setup_and_start_gnss(void)
+{
+  bool success = false;
+  vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+  if(setup_profile())
+  {
+    vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+    if(setup_aiding_server())
+    {
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+      if(setup_store_gga())
       {
-        for(i = 0; (power_mode_is_on() && (!success) && (i < MAX_GNSS_CONNECT)); i++)
+        vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+        if(setup_store_gsv())
         {
-          gnss_pwr_on_flag = true;
-          if(setup_and_start_gnss())
+          vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+          if(setup_unsolicited_indication())
           {
-            success = true;
+            vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+            if(power_on_gnss())
+            {
+              success = true;
+            }
           }
         }
       }
@@ -603,67 +705,252 @@ bool init_droneid(void)
 }
 
 /***************************************************************************/
-/* Get stop condition */
+/* Main function for controlling network related */
 /***************************************************************************/
-uint8_t get_stop_condition(void)
+bool init_droneid(void)
 {
-  droneid_pwr_state_t mode = get_power_mode();
-  uint8_t stop_code;
+  bool success = false;
 
-  if( mode == DRONEID_PWR_OFF)
+  if(init_gsm_modem())
   {
-    stop_code = ERROR_CODE_USER_SHUT_DOWN;
+    msg_mode = SMS_SERVER_CONNECTION;
+    if(connect_gprs())
+    {
+      if(start_timers())
+      {
+        if(setup_socket())
+        {
+          if(setup_and_start_gnss())
+          {
+            gnss_pwr_on_flag = true;
+            if(open_id_socket_server())
+            {
+              msg_mode = SOCKET_SERVER_CONNECTION;            
+              if(enable_get_gsm_pos())
+              {
+                success = true;
+              }
+            }
+          }
+        }
+      }
+    }
   }
-  else if( mode == DRONEID_PWR_OFF_LOW_BATT)
+  return success;
+}
+
+/***************************************************************************/
+/* Send start package to server */
+/***************************************************************************/
+bool send_udp_start_tracking_msg()
+{
+  bool success = false;
+  uint16_t msg_len = 0;
+  uint8_t data_msg[MAX_DATA_MSG_SIZE], array_buffer[3], socket_no[2];
+  if(build_start_msg(&msg_len, data_msg))
   {
-    stop_code = ERROR_CODE_LOW_BATT_V;
+    if(msg_len != 0)
+    {
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+      if(send_udp_msg(data_msg, msg_len))
+      {
+        success = true;
+      }
+    }
+  }
+  return success;
+}
+
+
+/***************************************************************************/
+/* Update gsm info */
+/***************************************************************************/
+void update_gsm_info()
+{
+  if(read_netw_reg_loc())
+  {
+    set_error_count(&transmit_error_counters.error_cnt_read_loc, 0);
+    if(gsm_info_update())
+    {
+      set_error_count(&transmit_error_counters.error_cnt_send_loc, 0);
+    }
+    else
+    {
+      add_error_count(&transmit_error_counters.error_cnt_send_loc);
+    }
   }
   else
-    stop_code = error_code;
+  {
+    add_error_count(&transmit_error_counters.error_cnt_read_loc);
+  }
+}
 
-  return stop_code;
+/***************************************************************************/
+/* Get gga msg  */
+/***************************************************************************/
+void get_gga(void)
+{
+  if(update_gga_data())
+  {
+    set_error_count(&transmit_error_counters.error_cnt_read_gga, 0);
+    if(gnss_fix())
+    {
+      if(droneID_has_moved())
+      {
+        xSemaphoreGive( xSemaphoreTransmitPos );
+        xTimerReset( xHandleTransmitTimer, TIME_20_MS);
+      }
+    }
+  }
+  else
+  {
+      add_error_count(&transmit_error_counters.error_cnt_read_gga);
+  }
+
+}
+
+/***************************************************************************/
+/* Send dronid pos to server */
+/***************************************************************************/
+void transmit_position(void)
+{
+  update_pre_pos();
+  if(update_rssi_values())
+  {
+    set_error_count(&transmit_error_counters.error_cnt_get_rssi, 0);
+    update_tracking_timer_value();
+    if(send_udp_tracking_msg())
+    {
+      set_error_count(&transmit_error_counters.error_counter_send_track, 0);
+    }
+    else
+    {
+      add_error_count(&transmit_error_counters.error_counter_send_track);
+    }
+  }
+  else
+  {
+    add_error_count(&transmit_error_counters.error_cnt_get_rssi);
+  }
+}
+
+/***************************************************************************/
+/* Get gsv data  */
+/***************************************************************************/
+void get_gsv(void)
+{
+  if(get_and_send_gsv())
+  {
+    set_error_count(&transmit_error_counters.error_cnt_read_gsv , 0);
+  }
+  else
+  {
+    add_error_count(&transmit_error_counters.error_cnt_read_gsv);
+  }
+}
+
+/***************************************************************************/
+/* Enter tracking mode */
+/***************************************************************************/
+bool tracking_mode(void)
+{
+  bool success = false;
+  if(start_response_from_server())
+  {
+    while(power_mode_is_on() && error_count_accepted())
+    {
+      read_udp_server_msg();
+
+      if(xSemaphoreTake( xSemaphoreGSMInfoTimerExpired, ( TickType_t ) 0) == pdTRUE)
+      {
+        update_gsm_info();
+      }
+
+      if(xSemaphoreTake( xSemaphoreGetGgga, ( TickType_t ) 0) == pdTRUE)
+      {
+        get_gga();
+      }
+
+      if(xSemaphoreTake( xSemaphoreTransmitPos, ( TickType_t ) UDP_TRAKING_LOOP_DELAY_MS) == pdTRUE)
+      {
+        transmit_position();
+      }
+
+      if((xSemaphoreTake( xSemaphoreGsvTimerExpired, ( TickType_t ) 0) == pdTRUE) && (serv_cmd<<7))
+      {
+        get_gsv();
+      }
+    }
+  }
+
+  if(error_count_accepted())
+    success = true;
+
+  return success;
 }
 
 /***************************************************************************/
 /* Loop for connecting, transmitting and rebooting in case of errors */
 /***************************************************************************/
-void enter_droneid_crtl_loop(void)
+bool enter_droneid_crtl_loop_(void)
 {
-  TASK_LOOP
+  if(send_udp_start_tracking_msg())
   {
-    pre_gga_msg.lat = 0.0;
-    pre_gga_msg.lon = 0.0;
-    pre_gga_msg.alt = 0.0;
-
-    if(!init_droneid())
+    while(power_mode_is_on())
     {
-      if(power_mode_is_on())
-        error_reset_mcu(); // Reboot
+      if(!tracking_mode())
+      {
+        if(power_mode_is_on())
+        {
+          // Error has occurred that requires rebooting. Try sending stop msg first
+          set_indication_start_mode(false);
+          send_udp_stop_msg(get_stop_condition());
+          error_reset_mcu();
+        }
+      }
     }
 
-    if(msg_mode == SOCKET_SERVER_CONNECTION)
+    if(send_udp_stop_msg(get_stop_condition()))
     {
-      if(send_udp_start_tracking_msg())
+      power_down_gnss_gsm();
+      if(!(get_stop_condition()>>7))
       {
-        udp_tracking_mode();
-        set_indication_start_mode(false);
-        if(send_udp_stop_msg(get_stop_condition()))
+        xSemaphoreGive(xSemaphoreGsmPwrIsDown);
+        vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+        vTaskSuspend( NULL );
+      }
+    }
+  }
+  else
+  {
+    error_reset_mcu(); // Reboot or implement sms 
+  }
+}
+/***************************************************************************/
+/* Loop for connecting, transmitting and rebooting in case of errors */
+/***************************************************************************/
+void enter_droneid_loop(void)
+{
+  if(power_on_gsm_modem())
+  {
+    TASK_LOOP
+    {
+      if(reset_paramters())
+      {
+        if(init_droneid())
         {
-          power_down_gnss_gsm();
-          if(!(get_stop_condition()>>7))
+          if(enter_droneid_crtl_loop_())
           {
-            xSemaphoreGive(xSemaphoreGsmPwrIsDown);
-            vTaskDelay(DELAY_20_MS / portTICK_RATE_MS);
-            vTaskSuspend( NULL );
+
           }
         }
       }
     }
-    else
-    {
-      error_reset_mcu(); // Reboot until sms is written
-    }
+
+    if(power_mode_is_on())
+      error_reset_mcu(); // Reboot
   }
+  //reset_gsm_modem() USE IF FAILS
 }
 
 /***************************************************************************/
@@ -674,13 +961,13 @@ void droneid_ctrl_main(void *pvParameters)
   /* Wait until powered up */
   while(!power_mode_is_on())
   {
-    vTaskDelay(DELAY_100_MS / portTICK_RATE_MS);
+    vTaskDelay(TIME_100_MS / portTICK_RATE_MS);
   }
 
 #ifdef DEBUG
   debug_add_ascii_to_queue("DroneID ctrl task: Started\n");
 #endif
   
-  enter_droneid_crtl_loop();
-  vTaskSuspend( NULL );
+  enter_droneid_loop();
+  error_reset_mcu(); // Reboot
 }

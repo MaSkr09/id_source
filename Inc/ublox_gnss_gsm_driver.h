@@ -46,10 +46,16 @@
 /***************************************************************************/
 /* Global functions */
 /***************************************************************************/
-bool init_gsm_modem();
-bool connect_socket();
-bool setup_and_start_gnss();
+bool sync_gsm_modem();
+bool pin_code_check();
+bool disable_gsm_modem_echo();
+bool check_gprs_attached();
+bool get_server_ip();
+bool open_socket();
 bool reset_gsm_modem();
+bool psd_pdp_activate();
+bool psd_conf_ip();
+bool PSD_PROF_CONF();
 bool update_rssi();
 bool set_netw_reg_loc_urc();
 bool read_netw_reg_loc();
@@ -60,12 +66,19 @@ bool get_gnss_gsv();
 bool send_udp_gpgsv();
 bool send_udp_glgsv();
 void build_at_string(uint8_t *array, uint8_t *command, ...);
+bool setup_profile();
+bool setup_aiding_server();
+bool setup_store_gga();
+bool setup_store_gsv();
+bool setup_unsolicited_indication();
+bool power_on_gnss();
 
 bool send_gsm_nw_msg();
-bool send_udp_start_tracking_msg();
 bool send_udp_stop_msg(uint8_t stop_condition);
 bool read_udp_no_of_msg_bytes();
+bool send_udp_msg(uint8_t *data_msg, uint8_t data_len);
 bool power_off_gnss();
+bool power_on_gsm_modem();
 
 bool power_down_gsm_modem();
 #endif /* _UBLOX_CTRL_TASK_H */

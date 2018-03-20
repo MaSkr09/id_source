@@ -56,7 +56,7 @@
 #define false			 	0
 #define true			 	1
 
-#define OK				 	0
+#define OK				 0
 #define ERROR				-1
 
 /* $GPGGA sentence positions */
@@ -435,15 +435,34 @@ double degree_to_meter_conv(gpgga_t *gga1, gpgga_t *gga2)
 	return EARTH_RADIUS_M * c;
 }
 /***************************************************************************/
-void clear_gsv_msg(gpgsv_t *gsv)
+int clear_gsv_msg(gpgsv_t *gsv)
 {
+  char result = OK;
   char i,j;
-    for(i=0; i<4; i++)
+  for(i=0; i<4; i++)
+  {
+    for(j=0; j<4; j++)
     {
-      for(j=0; j<4; j++)
-      {
-        gsv[i].sat[j].prn = -1;
-      }
+      gsv[i].sat[j].prn = -1;
     }
+  }
+  return result;
+}
+/***************************************************************************/
+int clear_gga_msg(gpgga_t *gga)
+{
+  char result = OK;
+  gga->sat = 0;
+  gga->time = 0;
+  gga->hdop = 0;
+  gga->lat = 0;
+  gga->lon = 0;
+  gga->alt = 0;
+  gga->fix = GGA_FIX_INVALID;
+  gga->geoid_height = !0;
+  gga->dgps_time = !0;
+  gga->dgps_stat_id = 0;
+  
+  return result;
 }
 /***************************************************************************/
