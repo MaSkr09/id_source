@@ -44,6 +44,7 @@
 /* Global functions */
 /***************************************************************************/
 bool power_mode_is_on(void);
+void error_reset_mcu(void);
 droneid_pwr_state_t get_power_mode(void);
 void pwr_management_main(void *pvParameters);
 

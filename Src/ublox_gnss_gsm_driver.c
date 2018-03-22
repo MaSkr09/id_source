@@ -70,7 +70,7 @@
 #define open_sock_RESP_TIME_MS        10000
 #define GET_SERV_IP_RESP_TIME_MS      10000
 
-#define GET_NO_OF_BYTES_TIME_MS       2000
+#define GET_NO_OF_BYTES_TIME_MS       5000
 
 #define RSSI_TIME_MS                  2000 
 #define OPEN_MSG_TIME_MS              15000

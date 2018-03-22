@@ -53,7 +53,8 @@
 /***************************************************************************/
 typedef enum {DRONEID_PWR_OFF, 
               DRONEID_PWR_OFF_LOW_BATT,
-              DRONEID_PWR_ON
+              DRONEID_PWR_ON,
+              DRONEID_HARD_REBOOT
               } droneid_pwr_state_t;
 
 /***************************************************************************/

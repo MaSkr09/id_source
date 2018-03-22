@@ -45,6 +45,7 @@ typedef enum
   NO_INDICATION,
   DRONEID_CONNECT,
   DRONEID_PWR_DOWN,
+  BTN_REBOOT_RELEASE_TIME_FRAME,
   FLIGHT_ACCEPTED,
   FLIGHT_REJECTED,
   MISSING_GNSS,
@@ -60,8 +61,7 @@ indicator_signals_t get_highest_prio_signal(void)
 
   if( xSemaphoreTake( xSemaphoreTaskIndicators, ( TickType_t ) DELAY_500_MS ) == pdTRUE )
   {
-    /* Highest priority */
-    
+    /* Highest priority */    
     /* Btn reset time frame */
     if(pwr_task_indicator == CPU_PWR_DOWN_PWR_MGMT)
     {
@@ -71,6 +71,11 @@ indicator_signals_t get_highest_prio_signal(void)
     else if(cap_rst_task_indicator == RESET_TIME_FRAME_CAP_RST)
     {
       return_indication = RESET_BTN_TIME_FRAME;
+    }
+    /* Release for reboot */
+    else if(pwr_task_indicator == BTN_REBOOT_RELEASE_SIGN_MGMT)
+    {
+      return_indication = BTN_REBOOT_RELEASE_TIME_FRAME;
     }
     /* Reset btn in progress */
     else if(cap_rst_task_indicator == RESET_BTN_CAP_RST)
@@ -148,6 +153,7 @@ void indicator_main(void *pvParameters)
   /* Start software timer */
   xTimerStart( xHandleIndicatorGPTimer, 10000 );
   bool indicator_high = false;
+  uint8_t cnt = 0;
 
   indicator_signals_t pre_indicator_signal, nx_indicator_signal;
   TASK_LOOP
@@ -186,6 +192,35 @@ void indicator_main(void *pvParameters)
         htim2.Instance->CCR2 = 0xFFFF;
         htim2.Instance->CCR3 = 0xFFFF;
         htim2.Instance->CCR4 = 0x0000;
+      break;
+
+      case BTN_REBOOT_RELEASE_TIME_FRAME:
+        if(pre_indicator_signal != nx_indicator_signal)
+        {
+          xSemaphoreTake( xSemaphoreIndicatorTimerExpired, ( TickType_t ) 0);
+          xTimerChangePeriod(xHandleIndicatorGPTimer, 1, 200 );
+          xTimerReset( xHandleIndicatorGPTimer, 100);
+          cnt = 0;
+        }
+
+        if(xSemaphoreTake( xSemaphoreIndicatorTimerExpired, ( TickType_t ) 0) == pdTRUE)
+        {
+          if(cnt == 0)
+          {
+            cnt = 1;
+            set_led_duty(0xFFFF, 0x0000, 0x0000);
+          }
+          else if(cnt == 1)
+          {
+            cnt = 2;
+            set_led_duty(0x0000, 0xFFFF, 0x0000);
+          }
+          else
+          {
+            cnt = 0;
+            set_led_duty(0x0000, 0x0000, 0xFFFF);
+          }
+        }
       break;
 
       case RESET_BTN_IN_PROGRESS:

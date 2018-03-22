@@ -54,7 +54,7 @@ transmit_error_counter_t transmit_error_counters;
 #define GPRS_CON_SLEEP_MS           50
 #define MAX_GPRS_ITERATION          600
 
-#define UDP_TRAKING_LOOP_DELAY_MS   20
+#define UDP_TRAKING_LOOP_DELAY_MS   50
 #define MAX_TRACKING_UDP_ERRORS     3
 
 #define MAX_GPRS_CONNECT            3
@@ -64,9 +64,8 @@ transmit_error_counter_t transmit_error_counters;
 #define SMS_SERVER_CONNECTION       1
 #define SOCKET_SERVER_CONNECTION    2
 
-#define MAX_MSG_READ                3
 #define MSG_COUNT_DIF_WARN          4
-#define MAX_RESP_DIFF_ERROR         10
+#define MAX_RESP_DIFF_ERROR         5
 
 #define MAX_SEND_ERROR              2
 #define MAX_READ_GGA                2
@@ -298,18 +297,6 @@ void change_timer_period(uint32_t timer_period)
 /***************************************************************************/
 /* Error reset modems */
 /***************************************************************************/
-void error_reset_mcu(void)
-{
-  if(power_mode_is_on())
-  {
-    reset_gsm_modem();
-    NVIC_SystemReset();
-  }
-}
-
-/***************************************************************************/
-/* Error reset modems */
-/***************************************************************************/
 bool error_reset_modems(void)
 {
   bool success = false;
@@ -359,6 +346,28 @@ bool update_gga_data(void)
 }
 
 /***************************************************************************/
+/* Send gsm info */
+/***************************************************************************/
+uint8_t msg_response_delay(void)
+{
+  uint8_t msg_delay = 0xFF;
+  if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_5_MS ) == pdTRUE )
+  {
+    server_msg_count_id &= 0x0F;
+    if(server_msg_count_id >= echo_msg_count_cell_id)
+    {
+      msg_delay = server_msg_count_id - echo_msg_count_cell_id;
+    }
+    else if(server_msg_count_id < echo_msg_count_cell_id)
+    {
+      msg_delay = server_msg_count_id + 15 - echo_msg_count_cell_id;
+    }
+    xSemaphoreGive( xSemaphoreServerFlightMsgs );
+  }
+  return msg_delay;
+}
+
+/***************************************************************************/
 /* Check and read if modem contains msg from server */
 /***************************************************************************/
 bool read_udp_server_msg(void)
@@ -379,22 +388,27 @@ bool read_udp_server_msg(void)
         success = true;
     }
     // check counter value and update parameter if missing response from server
-    else if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_5_MS ) == pdTRUE )
+    else if(msg_response_delay() <= MSG_COUNT_DIF_WARN)
     {
-      server_msg_count_id &= 0x0F;
-      if(((server_msg_count_id >= echo_msg_count_cell_id) && ((server_msg_count_id - echo_msg_count_cell_id) > MSG_COUNT_DIF_WARN))
-      || ((server_msg_count_id < echo_msg_count_cell_id) && ((server_msg_count_id + 15 - echo_msg_count_cell_id) > MSG_COUNT_DIF_WARN)))
-      {
-        xSemaphoreGive( xSemaphoreServerFlightMsgs );
-        if(read_udp_no_of_msg_bytes())
-          success = true;
-      }
-      else
-      {
-        xSemaphoreGive( xSemaphoreServerFlightMsgs );
-        success = true;
-      }
+      success = read_udp_no_of_msg_bytes();
     }
+    
+//    else if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_5_MS ) == pdTRUE )
+//    {
+//      server_msg_count_id &= 0x0F;
+//      if(((server_msg_count_id >= echo_msg_count_cell_id) && ((server_msg_count_id - echo_msg_count_cell_id) > MSG_COUNT_DIF_WARN))
+//      || ((server_msg_count_id < echo_msg_count_cell_id) && ((server_msg_count_id + 15 - echo_msg_count_cell_id) > MSG_COUNT_DIF_WARN)))
+//      {
+//        xSemaphoreGive( xSemaphoreServerFlightMsgs );
+//        if(read_udp_no_of_msg_bytes())
+//          success = true;
+//      }
+//      else
+//      {
+//        xSemaphoreGive( xSemaphoreServerFlightMsgs );
+//        success = true;
+//      }
+//    }
   return success;
 }
 
@@ -493,6 +507,9 @@ void update_tracking_timer_value(void)
   }
 }
 
+/***************************************************************************/
+/* Check if droneid has moved */
+/***************************************************************************/
 bool droneID_has_moved(void)
 {
   bool return_value = false;
@@ -530,8 +547,7 @@ void update_pre_pos()
 /***************************************************************************/
 bool start_response_from_server()
 {
-  //TODO change when Kjeld update server
-  bool response_ok = true; //false;
+  bool response_ok = true;
   int16_t timeout = TIME_5000_MS;
   
   while((!(response_ok)) && (timeout > 0))
@@ -565,6 +581,10 @@ uint8_t get_stop_condition(void)
   {
     stop_code = ERROR_CODE_LOW_BATT_V;
   }
+  else if(msg_response_delay() <= MAX_RESP_DIFF_ERROR)
+  {
+    stop_code = ERROR_CODE_MISSING_RESP;
+  }
   else
   {
     stop_code = get_error_code();
@@ -579,14 +599,14 @@ uint8_t get_stop_condition(void)
 bool enable_get_gsm_pos(void)
 {
   bool success = false;
-  vTaskDelay(20);
+  vTaskDelay(TIME_20_MS);
   while(!set_netw_reg_loc_urc())
-    vTaskDelay(20);
+    vTaskDelay(TIME_20_MS);
 
-  vTaskDelay(20);
+  vTaskDelay(TIME_20_MS);
   if(set_disp_operator())
   {
-    vTaskDelay(20);
+    vTaskDelay(TIME_20_MS);
     if(read_netw_reg_loc())
     {
       success = true;
@@ -898,32 +918,36 @@ bool stop_droneid(void)
 }
 
 /***************************************************************************/
-/* Enter tracking mode */
+/* Enter tracking mode. Get positioning updates, transmit to server and    */
+/* read server msgs                                                        */
 /***************************************************************************/
 bool tracking_mode(void)
 {
   bool success = false;
+  uint8_t msg_delay = 0;
   if(start_response_from_server())
   {
     success = true;
 
-    while(power_mode_is_on() && error_count_accepted())
+    while(power_mode_is_on() && error_count_accepted() && (msg_delay <= MAX_RESP_DIFF_ERROR))
     {
-      read_udp_server_msg();
-
       if(xSemaphoreTake( xSemaphoreGSMInfoTimerExpired, ( TickType_t ) 0) == pdTRUE)
       {
+        read_udp_server_msg();
         update_gsm_info();
       }
 
       if(xSemaphoreTake( xSemaphoreGetGgga, ( TickType_t ) 0) == pdTRUE)
       {
+        read_udp_server_msg();
         get_gga();
       }
 
       if(xSemaphoreTake( xSemaphoreTransmitPos, ( TickType_t ) UDP_TRAKING_LOOP_DELAY_MS) == pdTRUE)
       {
+        read_udp_server_msg();
         transmit_position();
+        msg_delay = msg_response_delay();
       }
 
       if((xSemaphoreTake( xSemaphoreGsvTimerExpired, ( TickType_t ) 0) == pdTRUE) && (serv_cmd<<7))

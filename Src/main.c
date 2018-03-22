@@ -454,10 +454,7 @@ void main(void)
   xTaskCreate( ublox_data_reader_main, "UbloxDataReader", 1024, ( void * ) NULL, tskIDLE_PRIORITY+10, &xHandleUbloxDataReaderTask );
   xTaskCreate( uart_data_task, "UbloxDataWriter", 1024, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleUartTransmitTask );
   xTaskCreate( droneid_ctrl_main, "UbloxCtrl", 4096, ( void * ) NULL, tskIDLE_PRIORITY+3, &xHandleDroneidCtrlTask );
-
   xTaskCreate( pos_est_task, "posEst", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandlePosEstTask );
-//  xTaskCreate( msg_to_server_task, "MsgToServer", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleMsgToServerTask );
-
   xTaskCreate( battery_voltage_main, "BattVolt", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleBatteryVoltageTask );
   xTaskCreate( indicator_main, "indicator", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleIndicatorTask );
   xTaskCreate( barometric_sens_main, "bamoretric", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleBaroSensTask );
