@@ -50,8 +50,7 @@
 #define TIME_500_MS                 500
 #define TIME_1000_MS                1000
 #define TIME_5000_MS                5000
-
-#define MS_TO_SEC                   1000
+#define TIME_15_S                   15000
 
 /***************************************************************************/
 /* UART to ublox defines */

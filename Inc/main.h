@@ -73,7 +73,6 @@ typedef enum {DRONEID_PWR_OFF,
 //extern cnt_task_indicator_t cnt_task_indicator;
 extern pwr_task_indicator_t pwr_task_indicator;
 extern cap_rst_task_indicator_t cap_rst_task_indicator;
-extern data_transmit_indicator_t data_transmit_indicator;
 extern bool ctrl_power_on;
 extern SemaphoreHandle_t xSemaphoreTaskIndicators;
 
@@ -109,9 +108,6 @@ extern SemaphoreHandle_t xSemaphoreI2CPeriph;
 
 extern uint8_t ublox_trasnmit_complete;
 
-/* Queue to add data msg */
-extern QueueHandle_t xQueueSlipData;
-
 /* Ublox mutex protected data register */
 extern SemaphoreHandle_t xSemaphoreUbloxStatusReg;
 extern ublox_receive_results_t ublox_status_reg;
@@ -141,7 +137,6 @@ extern uint8_t echo_stop_msg_count;
 extern uint8_t echo_cell_info_msg_count;
 extern uint8_t send_msg_count_cell_id;
 extern uint8_t server_msg_count_id;
-//extern uint8_t server_echo_msg_count_id;
 extern uint8_t server_msg_time_interval;
 extern uint8_t new_server_msg_time_interval;
 extern uint8_t max_horizontal_server_msg;
@@ -209,13 +204,11 @@ extern SemaphoreHandle_t xSemaphoreDebugMutex;
 /* Buffers */
 /***************************************************************************/
 extern uint8_t uart3_rec_buffer[10];
-extern uint8_t uart6_rec_buffer[10];
 
 /***************************************************************************/
 /* Global queue handles */
 /***************************************************************************/
 extern QueueHandle_t xQueueUbloxReceive;
-extern QueueHandle_t xQueueAuxReceive;
 extern QueueHandle_t xQueueUartTransmit;
 
 /***************************************************************************/
@@ -232,7 +225,7 @@ extern TaskHandle_t xHandleBaroSensTask;
 extern TaskHandle_t xHandleImuTask;
 extern TaskHandle_t xHandlePosEstTask;
 extern TaskHandle_t xHandleDebugTask;
-
+extern TaskHandle_t xHandleDroneKillTask;
 /***************************************************************************/
 /* Global functions */
 /***************************************************************************/

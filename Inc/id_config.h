@@ -39,7 +39,8 @@
 /* Global defines */
 /***************************************************************************/
 /* DroneID ID number */
-#define DRONE_ID_NUMBER              (uint32_t)1000
+#define DRONE_ID_NUMBER              (uint32_t)505
+//#define DRONE_ID_NUMBER              (uint32_t)1005
 
 /* droneid server settings */
 #define GMS_MSG_PERIOD_S              15
@@ -55,6 +56,10 @@
 #define UDP_GPGSV_MSG_TYPE            4
 #define UDP_GLGSV_MSG_TYPE            5
 #define UDP_GSM_AREA_MSG_TYPE         6
+#define UDP_SERVER_MSG_TYPE           7
+
+#define REG_KILL_DRONEID              0
+
 
 #define DEBUG_TRANSMIT_TYPE           15
 

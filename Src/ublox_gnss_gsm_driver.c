@@ -74,7 +74,7 @@
 
 #define RSSI_TIME_MS                  2000 
 #define OPEN_MSG_TIME_MS              15000
-#define MAX_MSG_SEND_REPONSE_MS       5000
+#define MAX_MSG_SEND_REPONSE_MS       10000
 
 #define NETW_REG_LOC_TIME_MS          1000
 #define OPR_NAME_TIME_MS              1000
@@ -249,22 +249,20 @@ bool send_udp_msg(uint8_t *data_msg, uint8_t data_len)
       xSemaphoreGive( xSemaphoreSocket );
 
       clear_result_code(&ublox_status_reg.GP_RESULT_CODE);
-
-      if(build_and_send_msg(OPEN_MSG_TIME_MS, 
+      // Removed if() to avoid open msg waiting for data
+      build_and_send_msg(OPEN_MSG_TIME_MS, 
                             &ublox_status_reg.MODEM_READY_FOR_DATA,
                             xSemaphoreUbloxStatusReg, 
                             AT_COM_START, AT_PLUS, AT_SEND_TO_SERVER, AT_EQUALS, 
                             socket_no, AT_COMMA, ip_var, AT_COMMA, 
-                            DRONEID_SERVER_UDP_PORT, AT_COMMA, array_buffer, AT_END_OF_MSG, NULL))
-      {
-        vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
+                            DRONEID_SERVER_UDP_PORT, AT_COMMA, array_buffer, AT_END_OF_MSG, NULL);
+      vTaskDelay(TIME_20_MS / portTICK_RATE_MS);
 
-        if(add_data_to_send_queue(data_msg, data_len))
+      if(add_data_to_send_queue(data_msg, data_len))
+      {
+        if(check_response_timeout(MAX_MSG_SEND_REPONSE_MS, xSemaphoreUbloxStatusReg, &ublox_status_reg.GP_RESULT_CODE))
         {
-          if(check_response_timeout(MAX_MSG_SEND_REPONSE_MS, xSemaphoreUbloxStatusReg, &ublox_status_reg.GP_RESULT_CODE))
-          {
-            success = true;
-          }
+          success = true;
         }
       }
     }

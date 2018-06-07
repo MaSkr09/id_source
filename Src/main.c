@@ -68,6 +68,7 @@
 #include "imu_task.h"
 #include "pos_est_task.h"
 #include "uart_transmit.h"
+#include "drone_kill_task.h"
 
 #include "main.h"
 
@@ -96,6 +97,8 @@ TaskHandle_t xHandleBaroSensTask;
 TaskHandle_t xHandleImuTask;
 TaskHandle_t xHandlePosEstTask;
 TaskHandle_t xHandleDebugTask;
+TaskHandle_t xHandleDroneKillTask;
+
 
 /***************************************************************************/
 /* Mutex, queues, variables ... */
@@ -111,7 +114,6 @@ SemaphoreHandle_t xSemaphoreDebugMutex;
 //cnt_task_indicator_t cnt_task_indicator = NO_INDICATION_CNTR;
 pwr_task_indicator_t pwr_task_indicator = NO_INDICATION_PWR;
 cap_rst_task_indicator_t cap_rst_task_indicator = NO_INDICATION_CAP_RST;
-data_transmit_indicator_t data_transmit_indicator = NO_INDICATION_DATA_TRANS;
 bool ctrl_power_on = true;
 SemaphoreHandle_t xSemaphoreTaskIndicators;
 
@@ -150,7 +152,6 @@ uint8_t echo_stop_msg_count = 5;
 uint8_t echo_cell_info_msg_count = 5;
 uint8_t send_msg_count_cell_id = 0;
 uint8_t server_msg_count_id = 0;
-//uint8_t server_echo_msg_count_id = 0;
 uint8_t server_msg_time_interval = 1;
 uint8_t new_server_msg_time_interval = 1;
 uint8_t max_horizontal_server_msg = 50;
@@ -165,13 +166,8 @@ ublox_gsm_sign_t gsm_signal_and_signal;
 SemaphoreHandle_t xSemaphoreSocket;
 ublox_socket_t socket_data;
 
-
-/* Queue to add data msg */
-QueueHandle_t xQueueSlipData;
-
 /* Var for uart transmit */
 uint8_t ublox_trasnmit_complete = APP_FALSE;
-uint8_t debug_trasnmit_complete = APP_FALSE;
 
 /* Ublox mutex protected data register */
 SemaphoreHandle_t xSemaphoreUbloxStatusReg;
@@ -206,12 +202,10 @@ float initialBatteryVoltage = 0.0;
 
 /* Receive queues */
 QueueHandle_t xQueueUbloxReceive;
-QueueHandle_t xQueueAuxReceive;
 QueueHandle_t xQueueUartTransmit;
 
 /* Receive buffers */
 uint8_t uart3_rec_buffer[10];
-uint8_t uart6_rec_buffer[10];
 
 // Timer to update gsm info
 TimerHandle_t xHandleGSMInfoTimer;
@@ -295,26 +289,6 @@ void volt_task_timer_callback(TimerHandle_t xHandleVoltAdcGPTimer)
 }
 
 /***************************************************************************/
-/* Transmit aux uart */
-/***************************************************************************/
-void transmit_uart_debug(uint8_t *str)
-{
-  uint16_t size;
-  for(size = 0; str[size]!='\000'; size++){}
-
-  if(HAL_UART_Transmit_DMA(&huart6, str, size)!= HAL_OK)
-  {
-    Error_Handler();
-  }
-  
-  while(debug_trasnmit_complete != APP_TRUE)
-  {
-    vTaskDelay(2 / portTICK_RATE_MS);
-  }
-  debug_trasnmit_complete = APP_FALSE;
-}
-
-/***************************************************************************/
 /* Check if wakeup from sleep */
 /***************************************************************************/
 uint8_t startup_check(void)
@@ -339,7 +313,6 @@ uint8_t init_peripherals(void)
   MX_DMA_Init();
   MX_ADC1_Init();
   MX_I2C1_Init();
-  MX_USART6_UART_Init();
   MX_USART3_UART_Init();
   MX_TIM2_Init();
 }
@@ -354,7 +327,6 @@ void main(void)
 
   HAL_StatusTypeDef error_msg;
   error_msg = HAL_UART_Receive_DMA(&huart3, uart3_rec_buffer, sizeof( uint8_t ));
-  error_msg = HAL_UART_Receive_IT(&huart6, uart6_rec_buffer, sizeof( uint8_t ));
 
   /* Mutex and semaphores */
 
@@ -381,12 +353,6 @@ void main(void)
   xSemaphoreSocket = xSemaphoreCreateMutex();
   /* variables to define indication with LEDs */
   xSemaphoreTaskIndicators = xSemaphoreCreateMutex();
-
-  /* Mutex handle only allow one task to print at a time */
-//  xSemaphoreTrace = xSemaphoreCreateMutex();
-
-/* Queue to add data msg */
-    xQueueSlipData = xQueueCreate( 512, sizeof( uint8_t ) );
 
   /* Ublox mutex protected data register */
   xSemaphoreUbloxStatusReg = xSemaphoreCreateMutex();
@@ -429,7 +395,6 @@ void main(void)
 #ifdef TRANSMIT_GSV_DATA
   /* Timer and binary semaphore to wait for transmit gsv */
   xSemaphoreGsvTimerExpired = xSemaphoreCreateBinary();
-//  xHandleGsvGPTimer = xTimerCreate("CtrlResponseTimer", 5000, pdTRUE, ( void * ) 0, gsv_task_timer_callback);
   xHandleGsvGPTimer = xTimerCreate("CtrlResponseTimer", 20000, pdTRUE, ( void * ) 0, gsv_task_timer_callback);
 #endif
 
@@ -439,7 +404,6 @@ void main(void)
 
   /* Queues */
   xQueueUbloxReceive = xQueueCreate( 512, sizeof( uint8_t ) );
-  xQueueAuxReceive = xQueueCreate( 20, sizeof( uint8_t ) );
   xQueueUartTransmit = xQueueCreate( TX_ARRAY_SIZE, sizeof( uint8_t ) );
 
   /* Debug queue */
@@ -451,24 +415,23 @@ void main(void)
   /* Tasks */
   xTaskCreate( pwr_management_main, "PwrManagement", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandlePwrManagementTask );
   xTaskCreate( cap_btn_reset_main, "CapBtnReset", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleCapBtnResetTask );
-  xTaskCreate( ublox_data_reader_main, "UbloxDataReader", 1024, ( void * ) NULL, tskIDLE_PRIORITY+10, &xHandleUbloxDataReaderTask );
-  xTaskCreate( uart_data_task, "UbloxDataWriter", 1024, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleUartTransmitTask );
+  xTaskCreate( ublox_data_reader_main, "UbloxDataReader", 2048, ( void * ) NULL, tskIDLE_PRIORITY+10, &xHandleUbloxDataReaderTask );
+  xTaskCreate( uart_data_task, "UbloxDataWriter", 2048, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleUartTransmitTask );
   xTaskCreate( droneid_ctrl_main, "UbloxCtrl", 4096, ( void * ) NULL, tskIDLE_PRIORITY+3, &xHandleDroneidCtrlTask );
   xTaskCreate( pos_est_task, "posEst", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandlePosEstTask );
   xTaskCreate( battery_voltage_main, "BattVolt", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleBatteryVoltageTask );
   xTaskCreate( indicator_main, "indicator", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleIndicatorTask );
   xTaskCreate( barometric_sens_main, "bamoretric", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleBaroSensTask );
-  xTaskCreate( imu_main, "imu", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleImuTask );
+  xTaskCreate( imu_main, "imu", 1024, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleImuTask );
+  xTaskCreate( kill_drone_main, "kill", configMINIMAL_STACK_SIZE, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleDroneKillTask );
 
 #if defined(DEBUG) || defined(DEBUG_BARO)
-  xTaskCreate( debug_main_task, "debug", 2048, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleDebugTask );
+  xTaskCreate( debug_main_task, "debug", 4096, ( void * ) NULL, tskIDLE_PRIORITY+1, &xHandleDebugTask );
 #endif
 
   vTaskStartScheduler();
   // Should never come here!!!
   NVIC_SystemReset();
-
-//  debug_exit(0);
 }
 
 void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
@@ -500,10 +463,6 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *UartHandle)
   {
     ublox_trasnmit_complete = APP_TRUE;
   }
-  else if (UartHandle == &huart6)
-  {
-    debug_trasnmit_complete = APP_TRUE;
-  }
 }
 
 /**
@@ -519,11 +478,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
   {
     xQueueSendToBackFromISR( xQueueUbloxReceive, uart3_rec_buffer, NULL );
     HAL_UART_Receive_IT(&huart3, uart3_rec_buffer, sizeof( uint8_t ));
-  }
-  else if (UartHandle == &huart6)
-  {
-//    xQueueSendToBackFromISR( xQueueUbloxReceive, uart6_rec_buffer, NULL );
-//    HAL_UART_Receive_IT(&huart6, uart6_rec_buffer, sizeof( uint8_t ));
   }
 }
 

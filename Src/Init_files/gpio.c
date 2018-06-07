@@ -64,56 +64,21 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIO_CAP_BTN_PWR_O_GPIO_Port, GPIO_CAP_BTN_PWR_O_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_MPU_9250_FSYNC_O_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIO_MPU_9250_FSYNC_O_GPIO_Port, GPIO_MPU_9250_FSYNC_O_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIO_BATT_VOLT_EN_O_GPIO_Port, GPIO_BATT_VOLT_EN_O_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_CAP_BTN_PWR_O_Pin|GPIO_AUX1_OUT_Pin|GPIO_AUX2_OUT_Pin|GPIO_BATT_VOLT_EN_O_Pin|GPIO_CAP_BTN_PWR_O_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_SARA_G340_PWR_ON_O_Pin|GPIO_SARA_G340_RESET_O_Pin, GPIO_PIN_RESET);
 
-//////////////////////////////////////////////////////////////////////////////////////////////////
-//  /*Configure GPIO pins : PC14 PC15 PC1 PC2 
-//                           PC3 PC4 PC5 PC8 
-//                           PC9 PC11 PC12 */
-//  GPIO_InitStruct.Pin = GPIO_PIN_14|GPIO_PIN_15|GPIO_PIN_1|GPIO_PIN_2 
-//                          |GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_8 
-//                          |GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_12;
-//  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-//  GPIO_InitStruct.Pull = GPIO_NOPULL;
-//  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-//
-//  /*Configure GPIO pins : PA6 PA7 PA8 PA9 
-//                           PA10 PA11 PA12 */
-//  GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9 
-//                          |GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12;
-//  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-//  GPIO_InitStruct.Pull = GPIO_NOPULL;
-//  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-//
-//  /*Configure GPIO pins : PB0 PB1 PB2 PB13 
-//                           PB14 PB5 PB8 PB9 */
-//  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_13 
-//                          |GPIO_PIN_14|GPIO_PIN_5|GPIO_PIN_8|GPIO_PIN_9;
-//  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-//  GPIO_InitStruct.Pull = GPIO_NOPULL;
-//  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-//
-//  /*Configure GPIO pin : PD2 */
-//  GPIO_InitStruct.Pin = GPIO_PIN_2;
-//  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-//  GPIO_InitStruct.Pull = GPIO_NOPULL;
-//  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-//////////////////////////////////////////////////////////////////////////////////////////////////
   /*Configure GPIO pin : PtPin */
-  GPIO_InitStruct.Pin = GPIO_CAP_BTN_PWR_O_Pin;
+//  GPIO_InitStruct.Pin = GPIO_CAP_BTN_PWR_O_Pin;
+  GPIO_InitStruct.Pin = GPIO_CAP_BTN_PWR_O_Pin|GPIO_AUX1_OUT_Pin|GPIO_AUX2_OUT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIO_CAP_BTN_PWR_O_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PCPin PCPin */
   GPIO_InitStruct.Pin = GPIO_BATT_VOLT_EN_O_Pin;
@@ -131,27 +96,27 @@ void MX_GPIO_Init(void)
   /*Configure GPIO pin : PtPin */
   GPIO_InitStruct.Pin = GPIO_MPU_9250_FSYNC_O_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN; //GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIO_MPU_9250_FSYNC_O_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PtPin */
   GPIO_InitStruct.Pin = GPIO_VUSB_DETECT_I_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIO_VUSB_DETECT_I_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PtPin */
   GPIO_InitStruct.Pin = GPIO_SARA_G340_3V0_GPIO1_I_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIO_SARA_G340_3V0_GPIO1_I_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PtPin */
   GPIO_InitStruct.Pin = GPIO_LTC4065_CHRG_I_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIO_LTC4065_CHRG_I_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PBPin PBPin */
   GPIO_InitStruct.Pin = GPIO_SARA_G340_PWR_ON_O_Pin|GPIO_SARA_G340_RESET_O_Pin;

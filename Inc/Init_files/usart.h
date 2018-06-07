@@ -46,7 +46,6 @@
 /* USER CODE END Includes */
 
 extern UART_HandleTypeDef huart3;
-extern UART_HandleTypeDef huart6;
 
 /* USER CODE BEGIN Private defines */
 
@@ -55,7 +54,6 @@ extern UART_HandleTypeDef huart6;
 extern void Error_Handler(void);
 
 void MX_USART3_UART_Init(void);
-void MX_USART6_UART_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 

@@ -56,6 +56,6 @@ void pos_est_task(void *pvParameters)
   /* GNSS overall state machine */
   TASK_LOOP
   {
-    vTaskDelay(10 / portTICK_RATE_MS);
+    vTaskDelay(1000 / portTICK_RATE_MS);
   }
 }

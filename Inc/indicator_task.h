@@ -63,12 +63,6 @@ typedef enum{
   RESET_BTN_CAP_RST
 }cap_rst_task_indicator_t;
 
-typedef enum{
-  NO_INDICATION_DATA_TRANS,
-  GNSS_FIX_DATA_TRANS,
-  NO_GNSS_FIX_DATA_TRANS
-}data_transmit_indicator_t;
-
 /***************************************************************************/
 /* Global functions */
 /***************************************************************************/

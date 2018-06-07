@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (c) 2017, Martin Skriver <MaSkr@mmmi.sdu.dk> & <MaSkr09@gmail.com>
+* Copyright (c) 2018, Martin Skriver <MaSkr@mmmi.sdu.dk> & <MaSkr09@gmail.com>
 * All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
@@ -24,35 +24,26 @@
 * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *****************************************************************************
-* File: dynamic_array.h
-* Purpose: Dynamic array
+* File: drone_kill_task.h
+* Purpose: Set an output if the server msg containing kill drone is received
 * Project: DroneID v2
 * Author: Martin Skriver <MaSkr@mmmi.sdu.dk> & <MaSkr09@gmail.com>
 * ****************************************************************************
 * Log:
-* Created:  2017-05-29 Martin Skriver, Source written
+* Created:  2018-04-10 Martin Skriver, Source written
 ****************************************************************************/
-#ifndef _DYNAMIC_ARRAY_H
-#define _DYNAMIC_ARRAY_H
+#ifndef _DRONE_KILL_TASK_H
+#define _DRONE_KILL_TASK_H
 
 /***************************************************************************/
 /* Includes */
 /***************************************************************************/
-#include <stdint.h>
-
-/***************************************************************************/
-/* Global types and functions */
-/***************************************************************************/
-typedef struct {
-  uint8_t *array;
-  uint32_t used;
-  uint32_t size;
-} dyn_array_t;
 
 /***************************************************************************/
 /* Global functions */
 /***************************************************************************/
-void init_array(dyn_array_t *a, uint32_t initialSize); 
-void insert_array(dyn_array_t *a, uint8_t element); 
-void free_array(dyn_array_t *a);
-#endif /* _DYNAMIC_ARRAY_H */
+
+void kill_drone_main(void *pvParameters);
+
+
+#endif /* _DRONE_KILL_TASK_H */

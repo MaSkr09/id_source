@@ -67,12 +67,12 @@ transmit_error_counter_t transmit_error_counters;
 #define MSG_COUNT_DIF_WARN          4
 #define MAX_RESP_DIFF_ERROR         5
 
-#define MAX_SEND_ERROR              2
-#define MAX_READ_GGA                2
-#define MAX_READ_GSV                2
-#define MAX_SEND_GSM_LOC            2
-#define MAX_READ_GSM_LOC            2
-#define MAX_READ_RSSI               2
+#define MAX_SEND_ERROR              3
+#define MAX_READ_GGA                5
+#define MAX_READ_GSV                5
+#define MAX_SEND_GSM_LOC            5
+#define MAX_READ_GSM_LOC            5
+#define MAX_READ_RSSI               5
 
 #define TIME_5000_MS                5000
 #define RESPONSE_LOOP_TIME          100
@@ -171,6 +171,7 @@ bool add_error_count(uint8_t *inst)
   bool success = false;
   *inst = (*inst) +1;
   success = true;
+  vTaskDelay(TIME_1000_MS / portTICK_RATE_MS);
   return success;
 }
 
@@ -392,23 +393,6 @@ bool read_udp_server_msg(void)
     {
       success = read_udp_no_of_msg_bytes();
     }
-    
-//    else if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_5_MS ) == pdTRUE )
-//    {
-//      server_msg_count_id &= 0x0F;
-//      if(((server_msg_count_id >= echo_msg_count_cell_id) && ((server_msg_count_id - echo_msg_count_cell_id) > MSG_COUNT_DIF_WARN))
-//      || ((server_msg_count_id < echo_msg_count_cell_id) && ((server_msg_count_id + 15 - echo_msg_count_cell_id) > MSG_COUNT_DIF_WARN)))
-//      {
-//        xSemaphoreGive( xSemaphoreServerFlightMsgs );
-//        if(read_udp_no_of_msg_bytes())
-//          success = true;
-//      }
-//      else
-//      {
-//        xSemaphoreGive( xSemaphoreServerFlightMsgs );
-//        success = true;
-//      }
-//    }
   return success;
 }
 
@@ -417,16 +401,30 @@ bool read_udp_server_msg(void)
 /***************************************************************************/
 bool gsm_info_update(void)
 {
-  bool success = false;
+  bool success = false, send_msg = false;
 
   vTaskDelay(TIME_20_MS);
-  if(send_gsm_nw_msg())
-  {
+
     if( xSemaphoreTake( xSemaphoreCellId, ( TickType_t ) TIME_5_MS ) == pdTRUE )
     {
-      gsm_signal_and_signal.pre_mob_cell_id_code = gsm_signal_and_signal.mob_cell_id_code;
-      gsm_signal_and_signal.pre_mob_location_area_code = gsm_signal_and_signal.mob_location_area_code;
+      if((gsm_signal_and_signal.pre_mob_cell_id_code != gsm_signal_and_signal.mob_cell_id_code) ||
+        (gsm_signal_and_signal.pre_mob_location_area_code != gsm_signal_and_signal.mob_location_area_code))
+      {
+        send_msg = true;
+        gsm_signal_and_signal.pre_mob_cell_id_code = gsm_signal_and_signal.mob_cell_id_code;
+        gsm_signal_and_signal.pre_mob_location_area_code = gsm_signal_and_signal.mob_location_area_code;
+      }
+      else
+      {
+        success = true;
+      }
       xSemaphoreGive( xSemaphoreCellId );
+    }
+
+  if(send_msg)
+  {
+    if(send_gsm_nw_msg())
+    {
       success = true;
     }
   }
@@ -929,13 +927,12 @@ bool tracking_mode(void)
   {
     success = true;
 
-    while(power_mode_is_on() && error_count_accepted() && (msg_delay <= MAX_RESP_DIFF_ERROR))
+    while(power_mode_is_on() && error_count_accepted())// && (msg_delay <= MAX_RESP_DIFF_ERROR)) does not work proper and delay is to big
     {
-      if(xSemaphoreTake( xSemaphoreGSMInfoTimerExpired, ( TickType_t ) 0) == pdTRUE)
-      {
-        read_udp_server_msg();
-        update_gsm_info();
-      }
+//      if(xSemaphoreTake( xSemaphoreGSMInfoTimerExpired, ( TickType_t ) 0) == pdTRUE)
+//      {
+//        read_udp_server_msg();
+//      }
 
       if(xSemaphoreTake( xSemaphoreGetGgga, ( TickType_t ) 0) == pdTRUE)
       {
@@ -946,6 +943,7 @@ bool tracking_mode(void)
       if(xSemaphoreTake( xSemaphoreTransmitPos, ( TickType_t ) UDP_TRAKING_LOOP_DELAY_MS) == pdTRUE)
       {
         read_udp_server_msg();
+        update_gsm_info();
         transmit_position();
         msg_delay = msg_response_delay();
       }
@@ -954,6 +952,7 @@ bool tracking_mode(void)
       {
         get_gsv();
       }
+      gsm_info_update();
     }
   }
   return success;
@@ -967,11 +966,14 @@ bool enter_droneid_crtl_loop(void)
   bool success = false;
   if(send_udp_start_tracking_msg())
   {
-    if(tracking_mode())
+    if(gsm_info_update())
     {
-      if(power_mode_is_on())
+      if(tracking_mode())
       {
-        success = true;
+        if(power_mode_is_on())
+        {
+          success = true;
+        }
       }
     }
   }
@@ -1002,6 +1004,7 @@ void enter_droneid_loop(void)
         // Error has occurred that requires rebooting. Try sending stop msg first
         set_indication_start_mode(false);
         send_udp_stop_msg(get_stop_condition());
+        vTaskDelay(TIME_15_S / portTICK_RATE_MS);
         error_reset_mcu();
       }
       else

@@ -1,5 +1,5 @@
 /****************************************************************************
-* Copyright (c) 2017, Martin Skriver <MaSkr@mmmi.sdu.dk> & <MaSkr09@gmail.com>
+* Copyright (c) 2018, Martin Skriver <MaSkr@mmmi.sdu.dk> & <MaSkr09@gmail.com>
 * All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
@@ -24,39 +24,27 @@
 * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *****************************************************************************
-* File: dynamic_array.c
-* Purpose: Dynamic array
+* File: drone_kill_task.h
+* Purpose: Set an output if the server msg containing kill drone is received
 * Project: DroneID v2
 * Author: Martin Skriver <MaSkr@mmmi.sdu.dk> & <MaSkr09@gmail.com>
 * ****************************************************************************
 * Log:
-* Created:  2017-05-29 Martin Skriver, Source written
+* Created:  2018-04-10 Martin Skriver, Source written
 ****************************************************************************/
-#include "dynamic_array.h"
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include "main.h"
+#include "drone_kill_task.h"
 
-void init_array(dyn_array_t *a, uint32_t initialSize) 
-{
-  a->array = (int *)malloc(initialSize * sizeof(int));
-  a->used = 0;
-  a->size = initialSize;
-}
+/***************************************************************************/
+/* Defines and variables */
+/***************************************************************************/
 
-void insert_array(dyn_array_t *a, uint8_t element) 
+/***************************************************************************/
+/* Kill drone main */
+/***************************************************************************/
+void kill_drone_main(void *pvParameters)
 {
-  if (a->used == a->size) 
-  {
-    a->size *= 2;
-    a->array = (int *)realloc(a->array, a->size * sizeof(int));
-  }
-  a->array[a->used++] = element;
-}
-
-void free_array(dyn_array_t *a)
-{
-  free(a->array);
-  a->array = NULL;
-  a->used = a->size = 0;
+  HAL_GPIO_WritePin(GPIOC, GPIO_AUX1_OUT_Pin, RESET);
+  vTaskSuspend( NULL );
+  HAL_GPIO_WritePin(GPIOC, GPIO_AUX1_OUT_Pin, SET);
 }

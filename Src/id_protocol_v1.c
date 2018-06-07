@@ -333,7 +333,8 @@ bool read_tracking_msg(uint8_t *str)
   if( xSemaphoreTake( xSemaphoreServerFlightMsgs, ( TickType_t ) TIME_500_MS ) == pdTRUE )
   {
     echo_msg_count_cell_id = (0x0F &(*str));
-    new_server_msg_time_interval = *(str+1);
+//    new_server_msg_time_interval = *(str+1);
+    new_server_msg_time_interval = 1;
     max_horizontal_server_msg = *(str+2);
     max_vertical_server_msg = *(str+3);
     flight_permission = *(str+4);
@@ -361,6 +362,16 @@ bool read_cell_tracking_msg(uint8_t *str)
 }
 
 /***************************************************************************/
+/* Read cmd msg from server */
+/***************************************************************************/
+bool read_server_cmd_msg(str)
+{
+  if(str+1 == REG_KILL_DRONEID)
+  {
+    vTaskResume(xHandleDroneKillTask);
+  }
+}
+/***************************************************************************/
 /* Read header msg from server */
 /***************************************************************************/
 bool read_server_msg(uint8_t *str)
@@ -382,5 +393,10 @@ bool read_server_msg(uint8_t *str)
   {
     success = read_cell_tracking_msg(str);
   }
+  else if((*str>>4) == UDP_SERVER_MSG_TYPE)
+  {
+    success = read_server_cmd_msg(str);
+  }
+  
   return success;
 }

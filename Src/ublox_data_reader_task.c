@@ -38,7 +38,6 @@
 #endif
 #include "main.h"
 #include "usart.h"
-#include "dynamic_array.h"
 #include "ublox_reg.h"
 #include "ublox_data_reader_task.h"
 #include "server_settings.h"
